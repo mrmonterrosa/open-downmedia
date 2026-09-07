@@ -22,8 +22,12 @@ temp/
 *.ytdl
 
 # Binaries
+bin/
+backend/bin/
 yt-dlp
 yt-dlp.exe
+gallery-dl
+gallery-dl.exe
 ffmpeg
 ffmpeg.exe
 

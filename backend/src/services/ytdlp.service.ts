@@ -5,6 +5,25 @@ import YTDlpWrap from 'yt-dlp-wrap';
 import ffmpegPath from 'ffmpeg-static';
 import { ENV } from '../config/environment.js';
 
+export interface MediaImageItem {
+  id: string;
+  url: string;
+  thumbnail: string;
+  filename?: string;
+}
+
+export interface FormatOption {
+  id: string;
+  label: string;
+  ext: string;
+  resolution?: string;
+  filesize?: number;
+  isAudioOnly?: boolean;
+  isVideoOnly?: boolean;
+  isImage?: boolean;
+  directUrl?: string;
+}
+
 export interface MediaInfo {
   id: string;
   title: string;
@@ -15,17 +34,12 @@ export interface MediaInfo {
   uploaderUrl?: string;
   platform: string;
   description?: string;
+  mediaType: 'video' | 'image' | 'carousel';
   hasAudio: boolean;
   hasVideo: boolean;
-  formats: {
-    id: string;
-    label: string;
-    ext: string;
-    resolution?: string;
-    filesize?: number;
-    isAudioOnly?: boolean;
-    isVideoOnly?: boolean;
-  }[];
+  hasImages: boolean;
+  images?: MediaImageItem[];
+  formats: FormatOption[];
 }
 
 class YtDlpService {
@@ -53,7 +67,6 @@ class YtDlpService {
       if (fs.existsSync(localBin)) {
         this.binaryPath = localBin;
       } else {
-        // Intentar descargar usando curl
         console.log(`[yt-dlp] Descargando la última versión del binario de yt-dlp...`);
         try {
           const downloadUrl = isWindows
@@ -64,15 +77,9 @@ class YtDlpService {
             fs.chmodSync(localBin, '755');
           }
           this.binaryPath = localBin;
-          console.log(`[yt-dlp] Binario descargado exitosamente en: ${this.binaryPath}`);
+          console.log(`[yt-dlp] Binario instalado en: ${this.binaryPath}`);
         } catch {
-          // Si curl falla, intentar con YTDlpWrap o buscar en PATH
-          try {
-            await YTDlpWrap.downloadFromGithub(localBin);
-            this.binaryPath = localBin;
-          } catch {
-            this.binaryPath = 'yt-dlp';
-          }
+          this.binaryPath = 'yt-dlp';
         }
       }
 
@@ -116,73 +123,176 @@ class YtDlpService {
     return extractor || 'Web';
   }
 
+  /**
+   * Extracción especializada para publicaciones de Instagram (fotos, carruseles y videos)
+   */
+  private async extractInstagram(url: string): Promise<MediaInfo | null> {
+    try {
+      const { igdl } = await import('btch-downloader');
+      const res: any = await igdl(url);
+
+      if (res && res.result && Array.isArray(res.result) && res.result.length > 0) {
+        // Filtrar elementos únicos por URL
+        const uniqueItems: any[] = [];
+        const seen = new Set<string>();
+
+        for (const item of res.result) {
+          if (item && item.url && !seen.has(item.url)) {
+            seen.add(item.url);
+            uniqueItems.push(item);
+          }
+        }
+
+        if (uniqueItems.length > 0) {
+          const isCarousel = uniqueItems.length > 1;
+          const firstThumb = uniqueItems[0].thumbnail || uniqueItems[0].url;
+
+          const imagesList: MediaImageItem[] = uniqueItems.map((it, idx) => ({
+            id: `img_${idx}`,
+            url: it.url,
+            thumbnail: it.thumbnail || it.url,
+            filename: `instagram_media_${idx + 1}.jpg`,
+          }));
+
+          const formatsList: FormatOption[] = [];
+
+          if (isCarousel) {
+            formatsList.push({
+              id: 'image_all',
+              label: `Descargar Álbum Completo (ZIP - ${uniqueItems.length} Fotos)`,
+              ext: 'zip',
+              isImage: true,
+            });
+          }
+
+          uniqueItems.forEach((it, idx) => {
+            formatsList.push({
+              id: `image_${idx}`,
+              label: isCarousel ? `Foto ${idx + 1} HD` : 'Foto en Máxima Resolución (JPG)',
+              ext: 'jpg',
+              isImage: true,
+              directUrl: it.url,
+            });
+          });
+
+          return {
+            id: `ig_${Date.now()}`,
+            title: `Publicación de Instagram (${uniqueItems.length} ${uniqueItems.length > 1 ? 'elementos' : 'foto'})`,
+            thumbnail: firstThumb,
+            uploader: 'Instagram User',
+            platform: 'Instagram',
+            mediaType: isCarousel ? 'carousel' : 'image',
+            hasAudio: false,
+            hasVideo: false,
+            hasImages: true,
+            images: imagesList,
+            formats: formatsList,
+          };
+        }
+      }
+    } catch (igErr) {
+      console.warn('[Instagram Scraper] Intento primario fallido, usando fallback:', igErr);
+    }
+    return null;
+  }
+
+  /**
+   * Método principal de extracción que unifica yt-dlp con scrapers de imágenes
+   */
   public async getInfo(url: string): Promise<MediaInfo> {
+    const platform = this.detectPlatform(url);
+
+    // 1. Para Instagram, intentar primero la extracción especializada de fotos/carruseles/reels
+    if (platform === 'Instagram') {
+      const igResult = await this.extractInstagram(url);
+      if (igResult) {
+        return igResult;
+      }
+    }
+
+    // 2. Extracción mediante yt-dlp (videos y audios)
     if (!this.ytdlp) {
       throw new Error('El motor yt-dlp aún no está listo.');
     }
 
-    const jsonOutput = await this.ytdlp.execPromise([
-      '--dump-json',
-      '--no-warnings',
-      '--no-playlist',
-      url,
-    ]);
+    try {
+      const jsonOutput = await this.ytdlp.execPromise([
+        '--dump-json',
+        '--no-warnings',
+        '--no-playlist',
+        url,
+      ]);
 
-    const rawMetadata: any = JSON.parse(jsonOutput);
+      const rawMetadata: any = JSON.parse(jsonOutput);
+      const detectedPlatform = this.detectPlatform(url, rawMetadata.extractor_key || rawMetadata.extractor);
 
-    const platform = this.detectPlatform(url, rawMetadata.extractor_key || rawMetadata.extractor);
+      let durationString = '';
+      if (rawMetadata.duration) {
+        const secs = Math.floor(rawMetadata.duration);
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        durationString = `${m}:${s < 10 ? '0' : ''}${s}`;
+      }
 
-    let durationString = '';
-    if (rawMetadata.duration) {
-      const secs = Math.floor(rawMetadata.duration);
-      const m = Math.floor(secs / 60);
-      const s = secs % 60;
-      durationString = `${m}:${s < 10 ? '0' : ''}${s}`;
+      const formatsList: FormatOption[] = [
+        {
+          id: 'video_hd',
+          label: detectedPlatform === 'TikTok' ? 'Video MP4 HD (Sin Marca de Agua)' : 'Video MP4 HD (Mejor Calidad)',
+          ext: 'mp4',
+          resolution: rawMetadata.resolution || (rawMetadata.width && rawMetadata.height ? `${rawMetadata.width}x${rawMetadata.height}` : 'HD'),
+          isAudioOnly: false,
+        },
+        {
+          id: 'video_sd',
+          label: 'Video MP4 (Rápido / Ligero)',
+          ext: 'mp4',
+          resolution: 'SD',
+          isAudioOnly: false,
+        },
+        {
+          id: 'audio_mp3',
+          label: 'Solo Audio (MP3)',
+          ext: 'mp3',
+          isAudioOnly: true,
+        },
+        {
+          id: 'audio_m4a',
+          label: 'Solo Audio (M4A Original)',
+          ext: 'm4a',
+          isAudioOnly: true,
+        },
+      ];
+
+      return {
+        id: rawMetadata.id || 'media',
+        title: rawMetadata.title || 'Video sin título',
+        thumbnail: rawMetadata.thumbnail || (rawMetadata.thumbnails?.[0]?.url ?? ''),
+        duration: rawMetadata.duration,
+        durationString,
+        uploader: rawMetadata.uploader || rawMetadata.channel || rawMetadata.creator || 'Autor desconocido',
+        uploaderUrl: rawMetadata.uploader_url,
+        platform: detectedPlatform,
+        description: rawMetadata.description ? rawMetadata.description.slice(0, 200) + '...' : undefined,
+        mediaType: 'video',
+        hasAudio: true,
+        hasVideo: !rawMetadata.is_live,
+        hasImages: false,
+        formats: formatsList,
+      };
+    } catch (ytdlpError: any) {
+      const errMsg = ytdlpError?.message || '';
+
+      // Si yt-dlp falló porque no hay video (es una foto/carrusel), intentar rescate con btch-downloader
+      if (errMsg.includes('no video') || errMsg.includes('No video formats found')) {
+        console.log(`[getInfo] yt-dlp detectó ausencia de video, activando rescate de imágenes para: ${url}`);
+        const fallbackIg = await this.extractInstagram(url);
+        if (fallbackIg) {
+          return fallbackIg;
+        }
+      }
+
+      throw ytdlpError;
     }
-
-    const formatsList = [
-      {
-        id: 'video_hd',
-        label: platform === 'TikTok' ? 'Video MP4 HD (Sin Marca de Agua)' : 'Video MP4 HD (Mejor Calidad)',
-        ext: 'mp4',
-        resolution: rawMetadata.resolution || (rawMetadata.width && rawMetadata.height ? `${rawMetadata.width}x${rawMetadata.height}` : 'HD'),
-        isAudioOnly: false,
-      },
-      {
-        id: 'video_sd',
-        label: 'Video MP4 (Rápido / Ligero)',
-        ext: 'mp4',
-        resolution: 'SD',
-        isAudioOnly: false,
-      },
-      {
-        id: 'audio_mp3',
-        label: 'Solo Audio (MP3)',
-        ext: 'mp3',
-        isAudioOnly: true,
-      },
-      {
-        id: 'audio_m4a',
-        label: 'Solo Audio (M4A Original)',
-        ext: 'm4a',
-        isAudioOnly: true,
-      },
-    ];
-
-    return {
-      id: rawMetadata.id || 'media',
-      title: rawMetadata.title || 'Video sin título',
-      thumbnail: rawMetadata.thumbnail || (rawMetadata.thumbnails?.[0]?.url ?? ''),
-      duration: rawMetadata.duration,
-      durationString,
-      uploader: rawMetadata.uploader || rawMetadata.channel || rawMetadata.creator || 'Autor desconocido',
-      uploaderUrl: rawMetadata.uploader_url,
-      platform,
-      description: rawMetadata.description ? rawMetadata.description.slice(0, 200) + '...' : undefined,
-      hasAudio: true,
-      hasVideo: !rawMetadata.is_live,
-      formats: formatsList,
-    };
   }
 
   public getDownloadArgs(url: string, format: string, outputTemplate: string): string[] {

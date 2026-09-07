@@ -26,13 +26,11 @@
 
       <!-- Badge de Estado y Botón GitHub -->
       <div class="flex items-center gap-3">
-        <!-- Badge de Disponibilidad de Marca -->
         <div class="hidden sm:inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[#facc15] text-xs font-semibold">
           <span class="w-2 h-2 rounded-full bg-[#facc15] animate-pulse"></span>
-          <span>Motor yt-dlp v2026</span>
+          <span>Motor Dual Video & Fotos</span>
         </div>
 
-        <!-- Botón Enlace a Repositorio GitHub -->
         <a 
           href="https://github.com/mrmonterrosa/open-downmedia" 
           target="_blank" 
@@ -55,14 +53,14 @@
     <!-- Sección Hero -->
     <section class="text-center max-w-3xl mx-auto space-y-4">
       <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-[#facc15] text-xs uppercase tracking-widest font-bold">
-        <span>HERRAMIENTA OPEN SOURCE</span>
+        <span>HERRAMIENTA UNIVERSAL OPEN SOURCE</span>
       </div>
       <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
-        Descarga Medios de Redes Sociales <br class="hidden sm:inline" />
+        Descarga Videos, Fotos y Audios <br class="hidden sm:inline" />
         <span class="text-[#facc15]">Sin Marca de Agua</span>
       </h1>
       <p class="text-sm sm:text-base text-neutral-400 leading-relaxed max-w-2xl mx-auto">
-        Obtén videos en máxima calidad (HD/4K), audios en MP3 y fotos originales desde TikTok, Instagram, YouTube, X, Reddit y más. Rápido, privado y 100% gratuito.
+        Obtén videos en máxima resolución (HD/4K), audios originales en MP3 y carruseles de fotos completas desde TikTok, Instagram, YouTube, X, Reddit y más.
       </p>
     </section>
 
@@ -86,7 +84,7 @@
               type="text"
               [(ngModel)]="urlInput"
               (keyup.enter)="fetchMediaInfo()"
-              placeholder="Pega aquí el enlace de TikTok, Instagram, YouTube, X o Reddit..."
+              placeholder="Pega aquí el enlace de TikTok, Instagram (video o foto), YouTube, X o Reddit..."
               class="w-full pl-12 pr-24 py-4 rounded-2xl bg-[#121316] border border-white/10 text-white placeholder-neutral-500 focus:outline-none focus:border-[#facc15] focus:ring-2 focus:ring-[#facc15]/20 text-sm sm:text-base transition-all"
             />
 
@@ -150,7 +148,7 @@
 
         <!-- Chips de Redes Sociales Soportadas -->
         <div class="pt-2 border-t border-white/5 flex flex-wrap items-center gap-2">
-          <span class="text-xs text-neutral-400 font-medium mr-1">Compatibilidad garantizada:</span>
+          <span class="text-xs text-neutral-400 font-medium mr-1">Soporta videos y fotos:</span>
           @for (platform of supportedPlatforms; track platform.name) {
             <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#121316] border border-white/5 text-xs text-neutral-300">
               <span class="w-1.5 h-1.5 rounded-full bg-[#facc15]"></span>
@@ -165,10 +163,11 @@
 
     <!-- Tarjeta Bento de Previsualización y Descarga (Cuando hay resultado) -->
     @if (mediaResult(); as media) {
-      <section class="p-6 sm:p-8 rounded-[28px] bg-[#18191e] border border-amber-500/30 shadow-2xl relative overflow-hidden animate-fadeIn">
+      <section class="p-6 sm:p-8 rounded-[28px] bg-[#18191e] border border-amber-500/30 shadow-2xl relative overflow-hidden space-y-8 animate-fadeIn">
+        
         <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
           
-          <!-- Miniatura del Medio -->
+          <!-- Miniatura Principal del Medio -->
           <div class="md:col-span-4 relative rounded-[20px] overflow-hidden bg-[#121316] border border-white/10 aspect-video flex items-center justify-center">
             @if (media.thumbnail) {
               <img [src]="media.thumbnail" [alt]="media.title" class="w-full h-full object-cover" />
@@ -176,32 +175,46 @@
               <div class="text-neutral-500 text-sm">Sin miniatura</div>
             }
             
-            <!-- Badge de Duración -->
+            <!-- Badge de Duración (para videos) -->
             @if (media.durationString) {
               <div class="absolute bottom-2 right-2 px-2 py-0.5 rounded-md bg-black/80 text-white text-xs font-mono font-bold">
                 {{ media.durationString }}
               </div>
             }
 
-            <!-- Badge de Plataforma -->
+            <!-- Badge de Tipo de Medio -->
             <div class="absolute top-2 left-2 px-2.5 py-1 rounded-full bg-[#121316]/90 border border-white/15 text-[#facc15] text-[11px] font-bold">
-              {{ media.platform }}
+              @if (media.mediaType === 'carousel') {
+                Álbum de Fotos
+              } @else if (media.mediaType === 'image') {
+                Foto HD
+              } @else {
+                {{ media.platform }} Video
+              }
             </div>
           </div>
 
           <!-- Información y Selector de Formato -->
           <div class="md:col-span-8 space-y-4">
             <div>
-              <span class="text-xs uppercase tracking-wider font-bold text-[#facc15]">Listo para descargar</span>
+              <span class="text-xs uppercase tracking-wider font-bold text-[#facc15]">
+                @if (media.mediaType === 'carousel') {
+                  Álbum Completo Detectado
+                } @else if (media.mediaType === 'image') {
+                  Imagen Detectada
+                } @else {
+                  Video Listo para Descargar
+                }
+              </span>
               <h2 class="text-lg sm:text-xl font-bold text-white mt-1 line-clamp-2">{{ media.title }}</h2>
               <p class="text-xs sm:text-sm text-neutral-400 mt-1">
-                Por: <span class="text-neutral-200 font-semibold">{{ media.uploader }}</span>
+                Origen: <span class="text-neutral-200 font-semibold">{{ media.uploader }}</span> ({{ media.platform }})
               </p>
             </div>
 
-            <!-- Selector de Calidad / Formato -->
+            <!-- Selector de Formato -->
             <div class="space-y-2">
-              <label class="text-xs font-bold text-neutral-400 uppercase tracking-wider">Selecciona Formato:</label>
+              <label class="text-xs font-bold text-neutral-400 uppercase tracking-wider">Opciones de Descarga:</label>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 @for (fmt of media.formats; track fmt.id) {
                   <button 
@@ -240,18 +253,60 @@
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                   </svg>
-                  <span>Descargar a tu Dispositivo</span>
+                  <span>
+                    @if (selectedFormat() === 'image_all') {
+                      Descargar Álbum ZIP
+                    } @else {
+                      Descargar a tu Dispositivo
+                    }
+                  </span>
                 }
               </button>
 
               <p class="text-[11px] text-neutral-400 text-center sm:text-left">
-                La descarga inicia automáticamente en tu navegador sin redirecciones publicitarias.
+                Descarga limpia y directa sin anuncios.
               </p>
             </div>
 
           </div>
 
         </div>
+
+        <!-- Galería de Fotos (Si es un Carrusel / Álbum) -->
+        @if (media.images && media.images.length > 0) {
+          <div class="border-t border-white/10 pt-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white uppercase tracking-wider">
+                  Galería del Álbum ({{ media.images.length }} Fotos en Total)
+                </h3>
+                <p class="text-xs text-neutral-400">Puedes descargar fotos individualmente o bajar todas juntas en un archivo ZIP.</p>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              @for (img of media.images; track img.id; let idx = $index) {
+                <div class="group relative rounded-xl overflow-hidden bg-[#121316] border border-white/5 aspect-square">
+                  <img [src]="img.thumbnail" [alt]="'Foto ' + (idx + 1)" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  
+                  <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                    <span class="text-xs font-bold text-white">Foto {{ idx + 1 }}</span>
+                    <button 
+                      (click)="downloadSingleImage(img, idx)"
+                      class="px-3 py-1.5 rounded-lg bg-[#facc15] text-neutral-950 font-bold text-[11px] hover:bg-[#eab308] transition-colors flex items-center gap-1 shadow"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                      </svg>
+                      <span>Descargar</span>
+                    </button>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
       </section>
     }
 
@@ -259,10 +314,10 @@
     <section class="space-y-6">
       <div class="text-center max-w-2xl mx-auto">
         <h2 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-          Diseñado para Máximo Rendimiento y Calidad
+          Diseñado para Cualquier Tipo de Medio
         </h2>
         <p class="text-sm text-neutral-400 mt-2">
-          Tecnología de extracción limpia basada en flujos nativos sin pérdida ni compresión añadida.
+          Compatible tanto con videos en alta definición como con álbumes de fotos y carruseles completos.
         </p>
       </div>
 
@@ -277,11 +332,24 @@
           </div>
           <h3 class="text-base font-bold text-white">Sin Marcas de Agua</h3>
           <p class="mt-2 text-xs sm:text-sm text-neutral-400 leading-relaxed">
-            Localiza los streams puros de TikTok y Reels directamente desde el CDN antes de ser renderizados con logos.
+            Localiza los streams originales de TikTok y Reels directamente desde el CDN antes de ser renderizados con marcas.
           </p>
         </div>
 
-        <!-- Tarjeta 2: Extractor de Audio MP3 -->
+        <!-- Tarjeta 2: Fotos y Carruseles ZIP -->
+        <div class="p-6 rounded-[20px] bg-[#1d1e24] border border-white/5 hover:border-amber-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#facc15]/5 transition-all duration-300">
+          <div class="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[#facc15] flex items-center justify-center mb-4">
+            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+          </div>
+          <h3 class="text-base font-bold text-white">Fotos y Carruseles ZIP</h3>
+          <p class="mt-2 text-xs sm:text-sm text-neutral-400 leading-relaxed">
+            Descarga imágenes individuales o empaqueta publicaciones con múltiples fotos en un archivo ZIP al instante.
+          </p>
+        </div>
+
+        <!-- Tarjeta 3: Extractor de Audio MP3 -->
         <div class="p-6 rounded-[20px] bg-[#1d1e24] border border-white/5 hover:border-amber-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#facc15]/5 transition-all duration-300">
           <div class="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[#facc15] flex items-center justify-center mb-4">
             <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -290,20 +358,7 @@
           </div>
           <h3 class="text-base font-bold text-white">Extracción de Audio MP3</h3>
           <p class="mt-2 text-xs sm:text-sm text-neutral-400 leading-relaxed">
-            Convierte cualquier video musical, podcast o tendencia sonora a archivo de audio MP3 de alta fidelidad.
-          </p>
-        </div>
-
-        <!-- Tarjeta 3: Seguridad y Privacidad -->
-        <div class="p-6 rounded-[20px] bg-[#1d1e24] border border-white/5 hover:border-amber-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#facc15]/5 transition-all duration-300">
-          <div class="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-[#facc15] flex items-center justify-center mb-4">
-            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-            </svg>
-          </div>
-          <h3 class="text-base font-bold text-white">Privacidad y Sin Logs</h3>
-          <p class="mt-2 text-xs sm:text-sm text-neutral-400 leading-relaxed">
-            Tus descargas no son almacenadas de forma permanente ni asociadas a identificadores o cookies de usuario.
+            Convierte cualquier video musical o audio en tendencia a MP3 limpio en alta fidelidad.
           </p>
         </div>
 
@@ -316,7 +371,7 @@
           </div>
           <h3 class="text-base font-bold text-white">100% Auto-Hospedable</h3>
           <p class="mt-2 text-xs sm:text-sm text-neutral-400 leading-relaxed">
-            Despliégalo en tu propio servidor doméstico o VPS con Docker Compose en un solo comando (`docker compose up`).
+            Despliega la plataforma en tu propio servidor doméstico o VPS con Docker Compose en segundos.
           </p>
         </div>
 

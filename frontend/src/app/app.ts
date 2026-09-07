@@ -2,7 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DownloaderService } from './services/downloader.service';
-import { MediaInfo, FormatOption } from './models/media.model';
+import { MediaInfo, MediaImageItem } from './models/media.model';
 
 @Component({
   selector: 'app-root',
@@ -14,7 +14,6 @@ import { MediaInfo, FormatOption } from './models/media.model';
 export class App {
   private downloaderService = inject(DownloaderService);
 
-  // Estados con Signals de Angular
   urlInput = signal<string>('');
   isLoading = signal<boolean>(false);
   isDownloading = signal<boolean>(false);
@@ -23,38 +22,36 @@ export class App {
   selectedFormat = signal<string>('video_hd');
   activeFaq = signal<number | null>(null);
 
-  // Lista de plataformas soportadas
   supportedPlatforms = [
-    { name: 'TikTok', tag: 'Sin Marca de Agua', icon: 'tiktok' },
-    { name: 'Instagram', tag: 'Reels & Fotos', icon: 'instagram' },
+    { name: 'TikTok', tag: 'Video & Fotos', icon: 'tiktok' },
+    { name: 'Instagram', tag: 'Reels, Fotos & Álbumes', icon: 'instagram' },
     { name: 'YouTube', tag: 'Videos & MP3', icon: 'youtube' },
-    { name: 'X / Twitter', tag: 'HD Video', icon: 'twitter' },
-    { name: 'Facebook', tag: 'Reels & Watch', icon: 'facebook' },
-    { name: 'Reddit', tag: 'Video con Audio', icon: 'reddit' },
-    { name: 'Pinterest', tag: 'Imágenes & Pins', icon: 'pinterest' },
+    { name: 'X / Twitter', tag: 'HD Video & Fotos', icon: 'twitter' },
+    { name: 'Facebook', tag: 'Reels & Videos', icon: 'facebook' },
+    { name: 'Reddit', tag: 'Video & Galerías', icon: 'reddit' },
+    { name: 'Pinterest', tag: 'Pines de Foto & Video', icon: 'pinterest' },
   ];
 
-  // Preguntas frecuentes para SEO
   faqs = [
+    {
+      question: '¿Puedo descargar tanto fotos como videos de Instagram y TikTok?',
+      answer:
+        '¡Sí! Open-DownMedia detecta automáticamente si la publicación contiene videos, una sola imagen o un carrusel/álbum con múltiples fotos. Te permitirá descargar cada foto en alta definición o descargar el álbum completo en un archivo .ZIP.',
+    },
     {
       question: '¿Cómo funciona la descarga de TikTok sin marca de agua?',
       answer:
-        'Open-DownMedia localiza el flujo de video original alojado en los servidores CDN de TikTok antes de que la aplicación móvil renderice el logotipo y la marca de agua del usuario. Así obtienes el archivo MP4 limpio en máxima resolución.',
-    },
-    {
-      question: '¿Qué tipo de contenidos puedo descargar de Instagram?',
-      answer:
-        'Puedes descargar Reels, publicaciones individuales con video o imagen, y pistas de audio de publicaciones públicas pegando el enlace correspondiente.',
+        'Open-DownMedia localiza el flujo de video original alojado en los servidores CDN de TikTok antes de que la aplicación móvil renderice el logotipo y la marca de agua del usuario.',
     },
     {
       question: '¿Es necesario registrarse o pagar alguna suscripción?',
       answer:
-        'No. Open-DownMedia es un proyecto 100% libre y de código abierto (Open Source). No requiere registro, no contiene anuncios publicitarios intrusivos y puede ser auto-hospedado con Docker.',
+        'No. Open-DownMedia es un proyecto 100% libre y de código abierto (Open Source). No requiere registro, no contiene anuncios y puede ser auto-hospedado con Docker.',
     },
     {
       question: '¿Cómo se descarga solo el audio en formato MP3?',
       answer:
-        'Una vez analizado el enlace, selecciona la opción "Solo Audio (MP3)" en las opciones de formato y pulsa en "Descargar Ahora". El motor extraerá y codificará el audio automáticamente.',
+        'Una vez analizado el enlace de video, selecciona la opción "Solo Audio (MP3)" en las opciones de formato y pulsa en "Descargar Ahora".',
     },
   ];
 
@@ -68,7 +65,7 @@ export class App {
         }
       }
     } catch {
-      // El navegador denegó el permiso del portapapeles
+      // Ignorar rechazo de permisos
     }
   }
 
@@ -94,14 +91,18 @@ export class App {
         this.isLoading.set(false);
         if (res.success && res.data) {
           this.mediaResult.set(res.data);
-          this.selectedFormat.set('video_hd');
+          // Seleccionar por defecto el primer formato disponible (ej. image_all o video_hd)
+          if (res.data.formats && res.data.formats.length > 0) {
+            this.selectedFormat.set(res.data.formats[0].id);
+          }
         } else {
           this.errorMessage.set(res.error || 'No se pudo obtener la información del medio.');
         }
       },
       error: (err) => {
         this.isLoading.set(false);
-        const backendError = err?.error?.error || 'Error al conectar con el servidor. Verifica que el enlace sea público y válido.';
+        const backendError =
+          err?.error?.error || 'Error al procesar el enlace. Verifica que la publicación sea pública y válida.';
         this.errorMessage.set(backendError);
       },
     });
@@ -116,9 +117,9 @@ export class App {
 
     this.isDownloading.set(true);
 
-    const downloadUrl = this.downloaderService.getDownloadUrl(url, format);
+    const currentFmt = media.formats.find((f) => f.id === format);
+    const downloadUrl = this.downloaderService.getDownloadUrl(url, format, currentFmt?.directUrl);
 
-    // Disparar descarga directa
     const link = document.createElement('a');
     link.href = downloadUrl;
     link.target = '_blank';
@@ -129,6 +130,18 @@ export class App {
     setTimeout(() => {
       this.isDownloading.set(false);
     }, 2500);
+  }
+
+  downloadSingleImage(imageItem: MediaImageItem, index: number): void {
+    const url = this.urlInput().trim();
+    const downloadUrl = this.downloaderService.getDownloadUrl(url, `image_${index}`, imageItem.url);
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   }
 
   toggleFaq(index: number): void {

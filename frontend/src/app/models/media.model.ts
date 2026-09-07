@@ -6,6 +6,15 @@ export interface FormatOption {
   filesize?: number;
   isAudioOnly?: boolean;
   isVideoOnly?: boolean;
+  isImage?: boolean;
+  directUrl?: string;
+}
+
+export interface MediaImageItem {
+  id: string;
+  url: string;
+  thumbnail: string;
+  filename?: string;
 }
 
 export interface MediaInfo {
@@ -18,8 +27,11 @@ export interface MediaInfo {
   uploaderUrl?: string;
   platform: string;
   description?: string;
+  mediaType: 'video' | 'image' | 'carousel';
   hasAudio: boolean;
   hasVideo: boolean;
+  hasImages: boolean;
+  images?: MediaImageItem[];
   formats: FormatOption[];
 }
 
