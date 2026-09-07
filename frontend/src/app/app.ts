@@ -20,39 +20,15 @@ export class App {
   errorMessage = signal<string | null>(null);
   mediaResult = signal<MediaInfo | null>(null);
   selectedFormat = signal<string>('video_hd');
-  activeFaq = signal<number | null>(null);
 
   supportedPlatforms = [
-    { name: 'TikTok', tag: 'Video & Fotos', icon: 'tiktok' },
-    { name: 'Instagram', tag: 'Reels, Fotos & Álbumes', icon: 'instagram' },
-    { name: 'YouTube', tag: 'Videos & MP3', icon: 'youtube' },
-    { name: 'X / Twitter', tag: 'HD Video & Fotos', icon: 'twitter' },
-    { name: 'Facebook', tag: 'Reels & Videos', icon: 'facebook' },
-    { name: 'Reddit', tag: 'Video & Galerías', icon: 'reddit' },
-    { name: 'Pinterest', tag: 'Pines de Foto & Video', icon: 'pinterest' },
-  ];
-
-  faqs = [
-    {
-      question: '¿Puedo descargar tanto fotos como videos de Instagram y TikTok?',
-      answer:
-        '¡Sí! Open-DownMedia detecta automáticamente si la publicación contiene videos, una sola imagen o un carrusel/álbum con múltiples fotos. Te permitirá descargar cada foto en alta definición o descargar el álbum completo en un archivo .ZIP.',
-    },
-    {
-      question: '¿Cómo funciona la descarga de TikTok sin marca de agua?',
-      answer:
-        'Open-DownMedia localiza el flujo de video original alojado en los servidores CDN de TikTok antes de que la aplicación móvil renderice el logotipo y la marca de agua del usuario.',
-    },
-    {
-      question: '¿Es necesario registrarse o pagar alguna suscripción?',
-      answer:
-        'No. Open-DownMedia es un proyecto 100% libre y de código abierto (Open Source). No requiere registro, no contiene anuncios y puede ser auto-hospedado con Docker.',
-    },
-    {
-      question: '¿Cómo se descarga solo el audio en formato MP3?',
-      answer:
-        'Una vez analizado el enlace de video, selecciona la opción "Solo Audio (MP3)" en las opciones de formato y pulsa en "Descargar Ahora".',
-    },
+    { name: 'TikTok', icon: 'tiktok' },
+    { name: 'Instagram', icon: 'instagram' },
+    { name: 'YouTube', icon: 'youtube' },
+    { name: 'X / Twitter', icon: 'twitter' },
+    { name: 'Facebook', icon: 'facebook' },
+    { name: 'Reddit', icon: 'reddit' },
+    { name: 'Pinterest', icon: 'pinterest' },
   ];
 
   async pasteFromClipboard(): Promise<void> {
@@ -150,13 +126,5 @@ export class App {
       return 'http://localhost:3001' + thumbnail;
     }
     return thumbnail;
-  }
-
-  toggleFaq(index: number): void {
-    if (this.activeFaq() === index) {
-      this.activeFaq.set(null);
-    } else {
-      this.activeFaq.set(index);
-    }
   }
 }
