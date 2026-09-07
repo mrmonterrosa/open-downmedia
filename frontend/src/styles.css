@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --main-color: #facc15;
+  --main-hover: #eab308;
+  --main-bg-dark: #121316;
+  --card-bg-dark: #18191e;
+  --sub-card-dark: #1d1e24;
+  --border-dark: rgba(255, 255, 255, 0.08);
+
+  /* Material 3 You Design Tokens */
+  --md-sys-color-primary: #facc15;
+  --md-sys-color-on-primary: #121316;
+  --md-sys-color-primary-container: #423000;
+  --md-sys-color-on-primary-container: #ffe088;
+  --md-sys-color-surface: #121316;
+  --md-sys-color-on-surface: #f3f4f6;
+  --md-sys-color-surface-container-low: #18191e;
+  --md-sys-color-surface-container: #1d1e24;
+  --md-sys-color-surface-container-high: #24252c;
+  --md-sys-color-outline: rgba(255, 255, 255, 0.1);
+  --md-sys-color-outline-variant: rgba(255, 255, 255, 0.05);
+}
+
+::selection {
+  background-color: #facc15;
+  color: #121316;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+body {
+  background-color: #121316;
+  color: #f3f4f6;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+}

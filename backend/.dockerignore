@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.angular
+.vscode
+.env*
+temp_downloads
+bin
