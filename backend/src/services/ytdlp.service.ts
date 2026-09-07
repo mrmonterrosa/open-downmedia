@@ -42,6 +42,26 @@ export interface MediaInfo {
   formats: FormatOption[];
 }
 
+export function extractRealMediaPayload(itemUrl: string): { realUrl: string; filename: string; headers?: Record<string, string> } {
+  try {
+    if (itemUrl && itemUrl.includes('token=')) {
+      const match = itemUrl.match(/token=([^\&]+)/);
+      if (match) {
+        const parts = match[1].split('.');
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
+        if (payload.url) {
+          return {
+            realUrl: payload.url,
+            filename: payload.filename || 'photo.jpg',
+            headers: payload.headers || { 'user-agent': 'TelegramBot (like TwitterBot)' },
+          };
+        }
+      }
+    }
+  } catch {}
+  return { realUrl: itemUrl, filename: 'photo.jpg' };
+}
+
 class YtDlpService {
   private ytdlp: YTDlpWrap | null = null;
   private binaryPath: string = '';
@@ -132,27 +152,37 @@ class YtDlpService {
       const res: any = await igdl(url);
 
       if (res && res.result && Array.isArray(res.result) && res.result.length > 0) {
-        // Filtrar elementos únicos por URL
-        const uniqueItems: any[] = [];
+        // Filtrar elementos únicos decodificando la URL real de cada uno
+        const uniqueItems: { realUrl: string; filename: string; originalItem: any }[] = [];
         const seen = new Set<string>();
 
         for (const item of res.result) {
-          if (item && item.url && !seen.has(item.url)) {
-            seen.add(item.url);
-            uniqueItems.push(item);
+          if (item && item.url) {
+            const payload = extractRealMediaPayload(item.url);
+            if (!seen.has(payload.realUrl)) {
+              seen.add(payload.realUrl);
+              uniqueItems.push({
+                realUrl: payload.realUrl,
+                filename: payload.filename,
+                originalItem: item,
+              });
+            }
           }
         }
 
         if (uniqueItems.length > 0) {
           const isCarousel = uniqueItems.length > 1;
-          const firstThumb = uniqueItems[0].thumbnail || uniqueItems[0].url;
 
-          const imagesList: MediaImageItem[] = uniqueItems.map((it, idx) => ({
-            id: `img_${idx}`,
-            url: it.url,
-            thumbnail: it.thumbnail || it.url,
-            filename: `instagram_media_${idx + 1}.jpg`,
-          }));
+          // Construir lista con la URL proxy para que el navegador muestre cada miniatura sin bloqueos de CORS/Referer
+          const imagesList: MediaImageItem[] = uniqueItems.map((it, idx) => {
+            const proxyThumb = `/api/media/image-proxy?url=${encodeURIComponent(it.realUrl)}`;
+            return {
+              id: `img_${idx}`,
+              url: it.realUrl,
+              thumbnail: proxyThumb,
+              filename: it.filename || `instagram_photo_${idx + 1}.jpg`,
+            };
+          });
 
           const formatsList: FormatOption[] = [];
 
@@ -165,10 +195,10 @@ class YtDlpService {
             });
           }
 
-          uniqueItems.forEach((it, idx) => {
+          imagesList.forEach((it, idx) => {
             formatsList.push({
               id: `image_${idx}`,
-              label: isCarousel ? `Foto ${idx + 1} HD` : 'Foto en Máxima Resolución (JPG)',
+              label: isCarousel ? `Foto ${idx + 1} en Alta Calidad` : 'Foto en Alta Calidad (JPG)',
               ext: 'jpg',
               isImage: true,
               directUrl: it.url,
@@ -178,7 +208,7 @@ class YtDlpService {
           return {
             id: `ig_${Date.now()}`,
             title: `Publicación de Instagram (${uniqueItems.length} ${uniqueItems.length > 1 ? 'elementos' : 'foto'})`,
-            thumbnail: firstThumb,
+            thumbnail: imagesList[0].thumbnail,
             uploader: 'Instagram User',
             platform: 'Instagram',
             mediaType: isCarousel ? 'carousel' : 'image',
@@ -191,18 +221,14 @@ class YtDlpService {
         }
       }
     } catch (igErr) {
-      console.warn('[Instagram Scraper] Intento primario fallido, usando fallback:', igErr);
+      console.warn('[Instagram Scraper] Error extrayendo publicación:', igErr);
     }
     return null;
   }
 
-  /**
-   * Método principal de extracción que unifica yt-dlp con scrapers de imágenes
-   */
   public async getInfo(url: string): Promise<MediaInfo> {
     const platform = this.detectPlatform(url);
 
-    // 1. Para Instagram, intentar primero la extracción especializada de fotos/carruseles/reels
     if (platform === 'Instagram') {
       const igResult = await this.extractInstagram(url);
       if (igResult) {
@@ -210,7 +236,6 @@ class YtDlpService {
       }
     }
 
-    // 2. Extracción mediante yt-dlp (videos y audios)
     if (!this.ytdlp) {
       throw new Error('El motor yt-dlp aún no está listo.');
     }
@@ -282,7 +307,6 @@ class YtDlpService {
     } catch (ytdlpError: any) {
       const errMsg = ytdlpError?.message || '';
 
-      // Si yt-dlp falló porque no hay video (es una foto/carrusel), intentar rescate con btch-downloader
       if (errMsg.includes('no video') || errMsg.includes('No video formats found')) {
         console.log(`[getInfo] yt-dlp detectó ausencia de video, activando rescate de imágenes para: ${url}`);
         const fallbackIg = await this.extractInstagram(url);

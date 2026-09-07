@@ -9,6 +9,12 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9_\-\. ]/g, '_').trim() || 'media_download';
 }
 
+const COMMON_IMAGE_HEADERS = {
+  'user-agent': 'TelegramBot (like TwitterBot)',
+  'accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+  'referer': 'https://www.instagram.com/',
+};
+
 export const mediaController = {
   async getHealth(req: Request, res: Response): Promise<void> {
     const health = await ytdlpService.checkHealth();
@@ -18,6 +24,31 @@ export const mediaController = {
       timestamp: new Date().toISOString(),
       ytdlp: health,
     });
+  },
+
+  async imageProxy(req: Request, res: Response): Promise<void> {
+    try {
+      const imageUrl = req.query.url as string;
+      if (!imageUrl) {
+        res.status(400).send('URL requerida');
+        return;
+      }
+
+      const fetchRes = await fetch(imageUrl, { headers: COMMON_IMAGE_HEADERS });
+
+      if (!fetchRes.ok) {
+        res.status(fetchRes.status).send('Error al cargar la imagen desde el CDN.');
+        return;
+      }
+
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      res.setHeader('Content-Type', fetchRes.headers.get('content-type') || 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.send(Buffer.from(arrayBuffer));
+    } catch (err) {
+      console.error('[Image Proxy] Error:', err);
+      res.status(500).send('Error procesando imagen');
+    }
   },
 
   async extractInfo(req: Request, res: Response): Promise<void> {
@@ -51,29 +82,29 @@ export const mediaController = {
       return;
     }
 
-    // 1. Manejo de descarga de todas las imágenes en ZIP (Carruseles / Álbumes)
+    // 1. Manejo de descarga de todas las imágenes en un archivo ZIP
     if (format === 'image_all') {
       try {
         console.log(`[Download ZIP] Empaquetando álbum completo de fotos para: ${url}`);
         const info = await ytdlpService.getInfo(url);
 
         if (!info.images || info.images.length === 0) {
-          res.status(404).json({ success: false, error: 'No se encontraron imágenes para empaquetar.' });
+          res.status(404).json({ success: false, error: 'No se encontraron imágenes en esta publicación.' });
           return;
         }
 
         res.setHeader('Content-Type', 'application/zip');
         res.setHeader('Content-Disposition', 'attachment; filename="open_downmedia_album.zip"');
 
-        const zip = (archiver as any).ZipArchive 
-          ? new (archiver as any).ZipArchive() 
+        const zip = (archiver as any).ZipArchive
+          ? new (archiver as any).ZipArchive()
           : (archiver as any)('zip');
         zip.pipe(res);
 
         for (let i = 0; i < info.images.length; i++) {
           const imgItem = info.images[i];
           try {
-            const fetchRes = await fetch(imgItem.url);
+            const fetchRes = await fetch(imgItem.url, { headers: COMMON_IMAGE_HEADERS });
             if (fetchRes.ok) {
               const buffer = Buffer.from(await fetchRes.arrayBuffer());
               zip.append(buffer, { name: `foto_${i + 1}.jpg` });
@@ -95,15 +126,21 @@ export const mediaController = {
       }
     }
 
-    // 2. Manejo de descarga de una imagen individual
+    // 2. Manejo de descarga de una imagen individual específica
     if (format.startsWith('image_') || directUrl) {
       try {
         let imageUrl = directUrl;
+        let photoIndex = 1;
+
+        if (format.startsWith('image_')) {
+          const parsedIndex = parseInt(format.replace('image_', ''), 10);
+          photoIndex = isNaN(parsedIndex) ? 1 : parsedIndex + 1;
+        }
 
         if (!imageUrl) {
           const info = await ytdlpService.getInfo(url);
-          const index = parseInt(format.replace('image_', ''), 10);
-          imageUrl = info.images?.[isNaN(index) ? 0 : index]?.url;
+          const index = photoIndex - 1;
+          imageUrl = info.images?.[index]?.url;
         }
 
         if (!imageUrl) {
@@ -111,17 +148,17 @@ export const mediaController = {
           return;
         }
 
-        console.log(`[Download Image] Transmitiendo imagen directa...`);
-        const fetchRes = await fetch(imageUrl);
+        console.log(`[Download Image] Transmitiendo foto ${photoIndex}...`);
+        const fetchRes = await fetch(imageUrl, { headers: COMMON_IMAGE_HEADERS });
 
         if (!fetchRes.ok) {
-          res.status(fetchRes.status).json({ success: false, error: 'No se pudo obtener la imagen desde el CDN.' });
+          res.status(fetchRes.status).json({ success: false, error: 'No se pudo descargar la imagen desde el CDN.' });
           return;
         }
 
         const buffer = Buffer.from(await fetchRes.arrayBuffer());
         res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Content-Disposition', 'attachment; filename="open_downmedia_foto.jpg"');
+        res.setHeader('Content-Disposition', `attachment; filename="foto_${photoIndex}.jpg"`);
         res.send(buffer);
         return;
       } catch (imgErr) {

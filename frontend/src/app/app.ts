@@ -144,6 +144,14 @@ export class App {
     document.body.removeChild(link);
   }
 
+  getImageUrl(thumbnail: string): string {
+    if (!thumbnail) return '';
+    if (thumbnail.startsWith('/api') && typeof window !== 'undefined' && window.location.port === '4200') {
+      return 'http://localhost:3001' + thumbnail;
+    }
+    return thumbnail;
+  }
+
   toggleFaq(index: number): void {
     if (this.activeFaq() === index) {
       this.activeFaq.set(null);

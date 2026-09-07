@@ -170,7 +170,7 @@
           <!-- Miniatura Principal del Medio -->
           <div class="md:col-span-4 relative rounded-[20px] overflow-hidden bg-[#121316] border border-white/10 aspect-video flex items-center justify-center">
             @if (media.thumbnail) {
-              <img [src]="media.thumbnail" [alt]="media.title" class="w-full h-full object-cover" />
+              <img [src]="getImageUrl(media.thumbnail)" [alt]="media.title" referrerpolicy="no-referrer" class="w-full h-full object-cover" />
             } @else {
               <div class="text-neutral-500 text-sm">Sin miniatura</div>
             }
@@ -287,7 +287,7 @@
             <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
               @for (img of media.images; track img.id; let idx = $index) {
                 <div class="group relative rounded-xl overflow-hidden bg-[#121316] border border-white/5 aspect-square">
-                  <img [src]="img.thumbnail" [alt]="'Foto ' + (idx + 1)" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  <img [src]="getImageUrl(img.thumbnail)" [alt]="'Foto ' + (idx + 1)" referrerpolicy="no-referrer" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                   
                   <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
                     <span class="text-xs font-bold text-white">Foto {{ idx + 1 }}</span>
