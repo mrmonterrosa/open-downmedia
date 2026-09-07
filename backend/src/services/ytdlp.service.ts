@@ -4,6 +4,7 @@ import { execSync } from 'child_process';
 import YTDlpWrap from 'yt-dlp-wrap';
 import ffmpegPath from 'ffmpeg-static';
 import { ENV } from '../config/environment.js';
+import { imageExtractorService } from './image.service.js';
 
 export interface MediaImageItem {
   id: string;
@@ -229,8 +230,18 @@ class YtDlpService {
   public async getInfo(url: string): Promise<MediaInfo> {
     const platform = this.detectPlatform(url);
 
+    // Si es Pinterest o un enlace con patrón explícito de fotos/galerías, intentar extracción directa de imágenes primero
+    const isPhotoPattern = url.includes('/photo/') || url.includes('/photos/') || url.includes('/gallery/') || platform === 'Pinterest';
+    if (isPhotoPattern) {
+      console.log(`[getInfo] URL identificada con patrón de fotos/galería (${platform}), buscando imágenes directamente...`);
+      const imgRes = await imageExtractorService.extractUniversalImages(url, platform);
+      if (imgRes) {
+        return imgRes;
+      }
+    }
+
     if (platform === 'Instagram') {
-      const igResult = await this.extractInstagram(url);
+      const igResult = await imageExtractorService.extractInstagram(url);
       if (igResult) {
         return igResult;
       }
@@ -307,12 +318,11 @@ class YtDlpService {
     } catch (ytdlpError: any) {
       const errMsg = ytdlpError?.message || '';
 
-      if (errMsg.includes('no video') || errMsg.includes('No video formats found')) {
-        console.log(`[getInfo] yt-dlp detectó ausencia de video, activando rescate de imágenes para: ${url}`);
-        const fallbackIg = await this.extractInstagram(url);
-        if (fallbackIg) {
-          return fallbackIg;
-        }
+      // Si yt-dlp indica ausencia de video o error en formatos, activar rescate universal de imágenes
+      console.log(`[getInfo] yt-dlp no localizó video para ${url}. Error: ${errMsg.slice(0, 80)}. Activando rescate universal de fotos/carrusel...`);
+      const imageResult = await imageExtractorService.extractUniversalImages(url, platform);
+      if (imageResult) {
+        return imageResult;
       }
 
       throw ytdlpError;

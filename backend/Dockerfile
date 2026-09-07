@@ -1,8 +1,11 @@
 # Etapa de construcción y ejecución
 FROM node:22-alpine
 
-# Instalar dependencias del sistema: Python3, FFmpeg, curl para yt-dlp
-RUN apk add --no-cache python3 ffmpeg curl ca-certificates
+# Instalar dependencias del sistema: Python3, Pip, FFmpeg, curl para yt-dlp y gallery-dl
+RUN apk add --no-cache python3 py3-pip ffmpeg curl ca-certificates
+
+# Instalar gallery-dl para descarga de fotos, galerías y carruseles de redes sociales
+RUN pip install gallery-dl --break-system-packages
 
 # Descargar e instalar la versión más reciente de yt-dlp en el PATH del sistema
 RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && \

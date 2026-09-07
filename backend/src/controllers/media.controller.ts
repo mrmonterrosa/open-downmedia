@@ -3,17 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
 import { ytdlpService } from '../services/ytdlp.service.js';
+import { getImageHeaders } from '../services/image.service.js';
 import { ENV } from '../config/environment.js';
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9_\-\. ]/g, '_').trim() || 'media_download';
 }
-
-const COMMON_IMAGE_HEADERS = {
-  'user-agent': 'TelegramBot (like TwitterBot)',
-  'accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-  'referer': 'https://www.instagram.com/',
-};
 
 export const mediaController = {
   async getHealth(req: Request, res: Response): Promise<void> {
@@ -34,7 +29,8 @@ export const mediaController = {
         return;
       }
 
-      const fetchRes = await fetch(imageUrl, { headers: COMMON_IMAGE_HEADERS });
+      const headers = getImageHeaders(imageUrl);
+      const fetchRes = await fetch(imageUrl, { headers });
 
       if (!fetchRes.ok) {
         res.status(fetchRes.status).send('Error al cargar la imagen desde el CDN.');
@@ -104,7 +100,7 @@ export const mediaController = {
         for (let i = 0; i < info.images.length; i++) {
           const imgItem = info.images[i];
           try {
-            const fetchRes = await fetch(imgItem.url, { headers: COMMON_IMAGE_HEADERS });
+            const fetchRes = await fetch(imgItem.url, { headers: getImageHeaders(imgItem.url) });
             if (fetchRes.ok) {
               const buffer = Buffer.from(await fetchRes.arrayBuffer());
               zip.append(buffer, { name: `foto_${i + 1}.jpg` });
@@ -149,7 +145,7 @@ export const mediaController = {
         }
 
         console.log(`[Download Image] Transmitiendo foto ${photoIndex}...`);
-        const fetchRes = await fetch(imageUrl, { headers: COMMON_IMAGE_HEADERS });
+        const fetchRes = await fetch(imageUrl, { headers: getImageHeaders(imageUrl) });
 
         if (!fetchRes.ok) {
           res.status(fetchRes.status).json({ success: false, error: 'No se pudo descargar la imagen desde el CDN.' });
