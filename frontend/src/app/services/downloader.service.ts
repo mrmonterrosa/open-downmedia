@@ -24,12 +24,34 @@ export class DownloaderService {
     return this.http.post<ApiResponse<MediaInfo>>(`${this.baseUrl}/media/info`, { url });
   }
 
-  getDownloadUrl(url: string, formatId: string, directUrl?: string): string {
+  toBase64(str: string): string {
+    try {
+      return btoa(
+        encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+          return String.fromCharCode(parseInt(p1, 16));
+        })
+      );
+    } catch {
+      return typeof btoa !== 'undefined' ? btoa(str) : str;
+    }
+  }
+
+  getDownloadUrl(url: string, formatId: string, directUrl?: string, filename?: string): string {
     const encodedUrl = encodeURIComponent(url);
     const encodedFormat = encodeURIComponent(formatId);
-    let downloadLink = `${this.baseUrl}/media/download?url=${encodedUrl}&format=${encodedFormat}`;
+
     if (directUrl) {
-      downloadLink += `&directUrl=${encodeURIComponent(directUrl)}`;
+      const b64 = this.toBase64(directUrl);
+      let downloadLink = `${this.baseUrl}/media/download?base64=${encodeURIComponent(b64)}&format=${encodedFormat}&url=${encodedUrl}`;
+      if (filename) {
+        downloadLink += `&filename=${encodeURIComponent(filename)}`;
+      }
+      return downloadLink;
+    }
+
+    let downloadLink = `${this.baseUrl}/media/download?url=${encodedUrl}&format=${encodedFormat}`;
+    if (filename) {
+      downloadLink += `&filename=${encodeURIComponent(filename)}`;
     }
     return downloadLink;
   }

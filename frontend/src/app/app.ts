@@ -204,6 +204,48 @@ export class App {
     this.isMetricsModalOpen.set(false);
   }
 
+  private async triggerDownload(downloadUrl: string, filename?: string, isImage: boolean = false): Promise<void> {
+    if (isImage) {
+      try {
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+          const errData = await response.json().catch(() => null);
+          throw new Error(errData?.error || `Error ${response.status}`);
+        }
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        if (filename) {
+          link.download = filename;
+        } else {
+          const disposition = response.headers.get('content-disposition');
+          const match = disposition && disposition.match(/filename="?([^"]+)"?/);
+          link.download = match ? match[1] : 'imagen.jpg';
+        }
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+        return;
+      } catch (err) {
+        console.warn('[Download] Fallback a descarga directa en la misma pestaña:', err);
+      }
+    }
+
+    // Descarga directa en la misma pestaña mediante enlace sin target="_blank"
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    if (filename) {
+      link.setAttribute('download', filename);
+    } else {
+      link.setAttribute('download', '');
+    }
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   downloadCurrentMedia(): void {
     const media = this.mediaResult();
     const url = this.urlInput().trim();
@@ -215,14 +257,14 @@ export class App {
     this.downloadCooldown.set(4);
 
     const currentFmt = media.formats.find((f) => f.id === format);
-    const downloadUrl = this.downloaderService.getDownloadUrl(url, format, currentFmt?.directUrl);
+    const isImage = !!(currentFmt?.isImage || currentFmt?.directUrl || format.startsWith('image_'));
+    const filename = currentFmt?.isImage && currentFmt?.id !== 'image_all'
+      ? `${media.platform.toLowerCase()}_${format}.${currentFmt.ext || 'jpg'}`
+      : (format === 'image_all' ? 'open_downmedia_album.zip' : undefined);
 
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const downloadUrl = this.downloaderService.getDownloadUrl(url, format, currentFmt?.directUrl, filename);
+
+    this.triggerDownload(downloadUrl, filename, isImage && format !== 'image_all');
 
     const interval = setInterval(() => {
       const current = this.downloadCooldown();
@@ -238,14 +280,10 @@ export class App {
 
   downloadSingleImage(imageItem: MediaImageItem, index: number): void {
     const url = this.urlInput().trim();
-    const downloadUrl = this.downloaderService.getDownloadUrl(url, `image_${index}`, imageItem.url);
+    const filename = imageItem.filename || `foto_${index + 1}.jpg`;
+    const downloadUrl = this.downloaderService.getDownloadUrl(url, `image_${index}`, imageItem.url, filename);
 
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.target = '_blank';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    this.triggerDownload(downloadUrl, filename, true);
   }
 
   getImageUrl(thumbnail: string): string {

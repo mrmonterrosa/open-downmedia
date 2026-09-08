@@ -2,20 +2,30 @@ import { Request, Response, NextFunction } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 
-// Lista blanca de plataformas y dominios soportados
+// Lista blanca de plataformas y dominios soportados (incluyendo sus CDNs de imágenes oficiales)
 const ALLOWED_DOMAIN_PATTERNS = [
   /^(.*\.)?tiktok\.com$/i,
+  /^(.*\.)?tiktokcdn(-[a-z0-9]+)?\.com$/i,
   /^(.*\.)?instagram\.com$/i,
+  /^(.*\.)?cdninstagram\.com$/i,
   /^(.*\.)?youtube\.com$/i,
   /^youtu\.be$/i,
+  /^(.*\.)?ytimg\.com$/i,
+  /^(.*\.)?googlevideo\.com$/i,
+  /^(.*\.)?ggpht\.com$/i,
   /^(.*\.)?twitter\.com$/i,
   /^(.*\.)?x\.com$/i,
+  /^(.*\.)?twimg\.com$/i,
   /^(.*\.)?threads\.net$/i,
   /^(.*\.)?facebook\.com$/i,
   /^fb\.watch$/i,
+  /^(.*\.)?fbcdn\.net$/i,
+  /^(.*\.)?fbsbx\.com$/i,
   /^(.*\.)?reddit\.com$/i,
+  /^(.*\.)?redd\.it$/i,
   /^(.*\.)?pinterest\.com$/i,
   /^pin\.it$/i,
+  /^(.*\.)?pinimg\.com$/i,
   /^(.*\.)?vimeo\.com$/i,
   /^(.*\.)?soundcloud\.com$/i,
   /^(.*\.)?bilibili\.com$/i,
@@ -71,10 +81,24 @@ export function validateSocialUrl(urlString: string): { isValid: boolean; error?
 }
 
 export function urlSecurityMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const urlToCheck = req.method === 'POST' ? req.body?.url : req.query?.url;
+  let urlToCheck = req.method === 'POST' ? req.body?.url : req.query?.url;
+
+  // Si no se proporcionó url directo pero sí el parámetro base64 (ej: /download?base64=...)
+  const base64Param = (req.query?.base64 || req.query?.b64) as string | undefined;
+  if (!urlToCheck && base64Param) {
+    try {
+      const decoded = Buffer.from(base64Param.trim(), 'base64').toString('utf-8').trim();
+      if (decoded.startsWith('{') && decoded.endsWith('}')) {
+        const parsed = JSON.parse(decoded);
+        urlToCheck = parsed.url || parsed.directUrl;
+      } else if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+        urlToCheck = decoded;
+      }
+    } catch {}
+  }
 
   if (!urlToCheck || typeof urlToCheck !== 'string') {
-    res.status(400).json({ success: false, error: 'El parámetro URL es requerido.' });
+    res.status(400).json({ success: false, error: 'El parámetro URL o base64 es requerido.' });
     return;
   }
 
@@ -87,7 +111,7 @@ export function urlSecurityMiddleware(req: Request, res: Response, next: NextFun
   next();
 }
 
-// Limitador de tasa para extracción de metadatos (60 peticiones cada 15 minutos)
+// Limitador de tasa para extracción de metadatos (100 peticiones cada 15 minutos)
 export const infoRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -96,14 +120,14 @@ export const infoRateLimiter = rateLimit({
   message: { success: false, error: 'Demasiadas solicitudes. Por favor, intenta de nuevo en unos minutos.' },
 });
 
-// Limitador de tasa para descargas/streams (15 descargas cada 15 minutos por IP)
+// Limitador de tasa para descargas/streams (60 descargas cada 15 minutos por IP)
 export const downloadRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
     success: false,
-    error: 'Has alcanzado el límite de 15 descargas cada 15 minutos. Por favor, espera un momento para continuar.',
+    error: 'Has alcanzado el límite de descargas. Por favor, espera un momento para continuar.',
   },
 });

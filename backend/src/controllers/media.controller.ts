@@ -113,11 +113,47 @@ export const mediaController = {
   },
 
   async downloadMedia(req: Request, res: Response): Promise<void> {
-    const url = req.query.url as string;
-    const format = (req.query.format as string) || 'video_hd';
-    const directUrl = req.query.directUrl as string | undefined;
+    let url = (req.query.url as string) || '';
+    let format = (req.query.format as string) || '';
+    let directUrl = req.query.directUrl as string | undefined;
+    const base64Param = (req.query.base64 || req.query.b64) as string | undefined;
+    const requestedFilename = req.query.filename as string | undefined;
 
-    if (!url) {
+    // Si viene el parámetro base64 (ej: /api/media/download?base64=...)
+    if (base64Param) {
+      try {
+        const decoded = Buffer.from(base64Param.trim(), 'base64').toString('utf-8').trim();
+        if (decoded.startsWith('{') && decoded.endsWith('}')) {
+          const parsed = JSON.parse(decoded);
+          if (parsed.url && !url) url = parsed.url;
+          if (parsed.directUrl && !directUrl) directUrl = parsed.directUrl;
+          if (parsed.format && !format) format = parsed.format;
+        } else if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+          // El parámetro base64 contiene directamente la URL de la imagen/recurso
+          directUrl = decoded;
+          if (!url) url = decoded;
+          if (!format) format = 'image_0';
+        }
+      } catch (e) {
+        console.warn('[Download Media] Error decodificando parámetro base64:', e);
+      }
+    }
+
+    // Si directUrl vino codificado en base64 en vez de URL plana
+    if (directUrl && !directUrl.startsWith('http://') && !directUrl.startsWith('https://')) {
+      try {
+        const decodedDirect = Buffer.from(directUrl.trim(), 'base64').toString('utf-8').trim();
+        if (decodedDirect.startsWith('http://') || decodedDirect.startsWith('https://')) {
+          directUrl = decodedDirect;
+        }
+      } catch {}
+    }
+
+    if (!format) {
+      format = directUrl ? 'image_0' : 'video_hd';
+    }
+
+    if (!url && !directUrl) {
       res.status(400).json({ success: false, error: 'URL requerida' });
       return;
     }
@@ -177,7 +213,7 @@ export const mediaController = {
           photoIndex = isNaN(parsedIndex) ? 1 : parsedIndex + 1;
         }
 
-        if (!imageUrl) {
+        if (!imageUrl && url) {
           const info = await ytdlpService.getInfo(url);
           const index = photoIndex - 1;
           imageUrl = info.images?.[index]?.url;
@@ -197,8 +233,12 @@ export const mediaController = {
         }
 
         const ext = imgData.contentType.includes('png') ? 'png' : (imgData.contentType.includes('webp') ? 'webp' : 'jpg');
+        const filename = requestedFilename
+          ? sanitizeFilename(requestedFilename)
+          : `foto_${photoIndex}.${ext}`;
+
         res.setHeader('Content-Type', imgData.contentType);
-        res.setHeader('Content-Disposition', `attachment; filename="foto_${photoIndex}.${ext}"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(imgData.buffer);
         return;
       } catch (imgErr) {
