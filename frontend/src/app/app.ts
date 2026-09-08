@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, HostListener, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DownloaderService } from './services/downloader.service';
@@ -20,6 +20,8 @@ export class App {
   errorMessage = signal<string | null>(null);
   mediaResult = signal<MediaInfo | null>(null);
   selectedFormat = signal<string>('video_hd');
+  currentImageIndex = signal<number>(0);
+  isLightboxOpen = signal<boolean>(false);
 
   supportedPlatforms = [
     { name: 'TikTok', icon: 'tiktok' },
@@ -61,12 +63,15 @@ export class App {
     this.isLoading.set(true);
     this.errorMessage.set(null);
     this.mediaResult.set(null);
+    this.currentImageIndex.set(0);
+    this.isLightboxOpen.set(false);
 
     this.downloaderService.extractInfo(url).subscribe({
       next: (res) => {
         this.isLoading.set(false);
         if (res.success && res.data) {
           this.mediaResult.set(res.data);
+          this.currentImageIndex.set(0);
           // Seleccionar por defecto el primer formato disponible (ej. image_all o video_hd)
           if (res.data.formats && res.data.formats.length > 0) {
             this.selectedFormat.set(res.data.formats[0].id);
@@ -82,6 +87,88 @@ export class App {
         this.errorMessage.set(backendError);
       },
     });
+  }
+
+  selectFormat(fmtId: string): void {
+    this.selectedFormat.set(fmtId);
+    if (fmtId.startsWith('image_') && fmtId !== 'image_all') {
+      const idx = parseInt(fmtId.replace('image_', ''), 10);
+      if (!isNaN(idx)) {
+        this.currentImageIndex.set(idx);
+      }
+    }
+  }
+
+  getActiveImageUrl(): string {
+    const media = this.mediaResult();
+    if (!media) return '';
+    if (media.images && media.images.length > 0) {
+      const idx = this.currentImageIndex();
+      const active = media.images[idx] || media.images[0];
+      return this.getImageUrl(active.thumbnail || active.url);
+    }
+    return this.getImageUrl(media.thumbnail);
+  }
+
+  prevImage(): void {
+    const media = this.mediaResult();
+    if (!media?.images || media.images.length <= 1) return;
+    const current = this.currentImageIndex();
+    const nextIdx = current === 0 ? media.images.length - 1 : current - 1;
+    this.goToImage(nextIdx);
+  }
+
+  nextImage(): void {
+    const media = this.mediaResult();
+    if (!media?.images || media.images.length <= 1) return;
+    const current = this.currentImageIndex();
+    const nextIdx = current === media.images.length - 1 ? 0 : current + 1;
+    this.goToImage(nextIdx);
+  }
+
+  goToImage(index: number): void {
+    const media = this.mediaResult();
+    if (!media?.images || index < 0 || index >= media.images.length) return;
+    this.currentImageIndex.set(index);
+
+    const fmtId = `image_${index}`;
+    if (this.selectedFormat() !== 'image_all' && media.formats.some((f) => f.id === fmtId)) {
+      this.selectedFormat.set(fmtId);
+    }
+  }
+
+  openLightbox(index?: number): void {
+    if (typeof index === 'number') {
+      this.currentImageIndex.set(index);
+    }
+    this.isLightboxOpen.set(true);
+  }
+
+  closeLightbox(): void {
+    this.isLightboxOpen.set(false);
+  }
+
+  downloadActiveImage(): void {
+    const media = this.mediaResult();
+    if (!media?.images) return;
+    const idx = this.currentImageIndex();
+    const active = media.images[idx];
+    if (active) {
+      this.downloadSingleImage(active, idx);
+    }
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeyDown(event: KeyboardEvent): void {
+    if (this.isLightboxOpen()) {
+      if (event.key === 'Escape') {
+        this.closeLightbox();
+      } else if (event.key === 'ArrowLeft') {
+        this.prevImage();
+      } else if (event.key === 'ArrowRight') {
+        this.nextImage();
+      }
+    }
   }
 
   downloadCurrentMedia(): void {
