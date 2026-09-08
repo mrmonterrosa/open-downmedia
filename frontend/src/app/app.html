@@ -483,14 +483,14 @@
               </span>
             </div>
 
-            <!-- Uso de Memoria RAM -->
+            <!-- Descargas Realizadas -->
             <div class="p-3.5 rounded-xl bg-[#121316] border border-white/5 space-y-1">
-              <span class="text-neutral-400 font-medium text-[11px] block">Memoria RAM (RSS)</span>
+              <span class="text-neutral-400 font-medium text-[11px] block">Descargas Realizadas</span>
               <div class="text-lg font-bold font-mono text-emerald-400">
-                {{ m.system.memoryRssMB }} MB
+                {{ m.stats.totalDownloadsCompleted }}
               </div>
               <span class="text-[10px] text-neutral-500">
-                Heap: {{ m.system.memoryHeapUsedMB }} MB
+                Total iniciadas: {{ m.stats.totalDownloadsStarted }}
               </span>
             </div>
 

@@ -46,7 +46,7 @@ El proyecto está construido bajo una estricta política de privacidad y rendimi
 - **Cooldown visual en el frontend:** El botón de descarga cuenta con un contador regresivo de 4 segundos tras cada clic para evitar dobles solicitudes involuntarias.
 
 ### 2. Monitorización y Telemetría en Tiempo Real
-- Endpoint público de administración (`/api/admin/metrics?token=opendownmedia_admin_2026`) que expone el estado de los slots de descarga, memoria RAM consumida (RSS y Heap), porcentaje de aciertos de caché (*cache hits*) y tiempo de actividad (*uptime*).
+- Endpoint público de administración (`/api/admin/metrics?token=opendownmedia_admin_2026`) que expone el estado de los slots de descarga, total de descargas procesadas, porcentaje de aciertos de caché (*cache hits*) y tiempo de actividad (*uptime*).
 - Modal interactivo en la interfaz del frontend con estilo Bento para auditar el estado del servidor en cualquier momento.
 
 ### 3. Extractores Especializados de Redes Complejas
@@ -337,10 +337,10 @@ Si se desea gestionar el frontend y backend como aplicaciones separadas en Dokpl
     "activeSlots": 0,
     "maxSlots": 3,
     "activeIps": [],
-    "memory": {
-      "rss": "85.42 MB",
-      "heapUsed": "48.15 MB",
-      "heapTotal": "62.30 MB"
+    "stats": {
+      "totalDownloadsStarted": 45,
+      "totalDownloadsCompleted": 43,
+      "totalDownloadsFailed": 2
     },
     "cache": {
       "size": 4,

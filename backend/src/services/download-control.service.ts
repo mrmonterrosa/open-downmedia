@@ -44,9 +44,6 @@ export interface ServerMetrics {
   system: {
     nodeVersion: string;
     platform: string;
-    memoryRssMB: number;
-    memoryHeapUsedMB: number;
-    memoryHeapTotalMB: number;
   };
 }
 
@@ -199,8 +196,6 @@ export class DownloadControlService {
     const totalQueries = this.stats.cacheHits + this.stats.cacheMisses;
     const hitRatio = totalQueries > 0 ? `${((this.stats.cacheHits / totalQueries) * 100).toFixed(1)}%` : '0%';
 
-    const mem = process.memoryUsage();
-
     let status: 'healthy' | 'busy' | 'degraded' = 'healthy';
     if (this.activeSlots >= this.MAX_GLOBAL_CONCURRENT_DOWNLOADS) {
       status = 'busy';
@@ -238,9 +233,6 @@ export class DownloadControlService {
       system: {
         nodeVersion: process.version,
         platform: process.platform,
-        memoryRssMB: Math.round((mem.rss / 1024 / 1024) * 10) / 10,
-        memoryHeapUsedMB: Math.round((mem.heapUsed / 1024 / 1024) * 10) / 10,
-        memoryHeapTotalMB: Math.round((mem.heapTotal / 1024 / 1024) * 10) / 10,
       },
     };
   }
