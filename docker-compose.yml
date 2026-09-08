@@ -32,8 +32,19 @@ services:
     depends_on:
       - backend
     networks:
-      - open-downmedia-net
       - dokploy-network
+      - open-downmedia-net
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=dokploy-network'
+      - 'traefik.http.routers.open-downmedia-http.rule=Host(`open-downmedia.cgmo.net`)'
+      - 'traefik.http.routers.open-downmedia-http.entrypoints=web'
+      - 'traefik.http.routers.open-downmedia-http.service=open-downmedia'
+      - 'traefik.http.routers.open-downmedia-https.rule=Host(`open-downmedia.cgmo.net`)'
+      - 'traefik.http.routers.open-downmedia-https.entrypoints=websecure'
+      - 'traefik.http.routers.open-downmedia-https.tls=true'
+      - 'traefik.http.routers.open-downmedia-https.service=open-downmedia'
+      - 'traefik.http.services.open-downmedia.loadbalancer.server.port=80'
 
 networks:
   open-downmedia-net:

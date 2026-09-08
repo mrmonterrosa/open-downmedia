@@ -130,10 +130,10 @@ function cleanupTempFiles(): void {
 cleanupTempFiles();
 setInterval(cleanupTempFiles, 15 * 60 * 1000);
 
-app.listen(ENV.PORT, () => {
+app.listen(ENV.PORT, '0.0.0.0', () => {
   console.log(`=========================================`);
   console.log(`🚀 Open-DownMedia Backend API Activo`);
-  console.log(`📡 Puerto: http://localhost:${ENV.PORT}`);
+  console.log(`📡 Puerto: http://0.0.0.0:${ENV.PORT}`);
   console.log(`🔒 Entorno: ${ENV.NODE_ENV}`);
   console.log(`🧹 Purgador de temporales activo (Zero-Storage Policy)`);
   console.log(`=========================================`);
