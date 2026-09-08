@@ -12,7 +12,11 @@ export function getImageHeaders(imageUrl: string): Record<string, string> {
   };
 
   const u = imageUrl.toLowerCase();
-  if (u.includes('cdninstagram.com') || u.includes('instagram.com')) {
+  if (u.includes('lookaside') || u.includes('fbsbx.com')) {
+    // lookaside.fbsbx.com exige un bot User-Agent para entregar el binario JPEG en vez de HTML redirect
+    headers['user-agent'] = 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)';
+    headers['referer'] = 'https://www.facebook.com/';
+  } else if (u.includes('cdninstagram.com') || u.includes('instagram.com')) {
     headers['referer'] = 'https://www.instagram.com/';
   } else if (u.includes('twimg.com') || u.includes('twitter.com') || u.includes('x.com')) {
     headers['referer'] = 'https://twitter.com/';
@@ -60,9 +64,13 @@ export class ImageExtractorService {
                 if (!foundUrls.includes(candidateUrl)) {
                   foundUrls.push(candidateUrl);
                 }
-                if (!extractedTitle && meta.title) extractedTitle = meta.title;
-                if (!extractedUploader && (meta.user || meta.author || meta.username || meta.pinner)) {
-                  extractedUploader = meta.user || meta.author || meta.username || meta.pinner;
+                if (!extractedTitle && (meta.caption || meta.post_text)) {
+                  extractedTitle = (meta.caption || meta.post_text).slice(0, 100);
+                } else if (!extractedTitle && meta.title && meta.title !== 'Photos') {
+                  extractedTitle = meta.title;
+                }
+                if (!extractedUploader && (meta.username || meta.user || meta.author || meta.pinner)) {
+                  extractedUploader = meta.username || meta.user || meta.author || meta.pinner;
                 }
               }
             }
@@ -247,39 +255,71 @@ export class ImageExtractorService {
    * Extracción de fotos de Facebook (publicaciones con fotos y álbumes)
    */
   public async extractFacebook(url: string): Promise<MediaInfo | null> {
+    // 1. Resolver redirección de enlaces de compartir (ej. /share/p/, /share/r/, fb.watch) a la URL canónica del post
+    let canonicalUrl = url;
+    try {
+      const redirectRes = await fetch(url, {
+        headers: {
+          'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+          'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+        },
+        redirect: 'follow',
+      });
+      canonicalUrl = redirectRes.url.split('?')[0] || redirectRes.url;
+      console.log(`[Facebook Extractor] URL canónica resuelta: ${canonicalUrl}`);
+    } catch (e) {
+      console.warn('[Facebook Extractor] Error resolviendo URL canónica:', e);
+    }
+
+    // 2. Intentar primero con gallery-dl sobre la URL canónica (extrae imágenes en máxima resolución, autor real y álbumes completos)
+    const gdlRes = await this.extractWithGalleryDl(canonicalUrl);
+    if (gdlRes && gdlRes.images.length > 0) {
+      console.log(`[Facebook Extractor] gallery-dl extrajo ${gdlRes.images.length} imágenes exitosamente de Facebook.`);
+      return this.buildMediaResponse({
+        id: `fb_${Date.now()}`,
+        title: gdlRes.title || 'Foto de Facebook',
+        uploader: gdlRes.uploader || 'Facebook User',
+        platform: 'Facebook',
+        imageUrls: gdlRes.images,
+      });
+    }
+
+    // 3. Fallback con OpenGraph scraper: probar Twitterbot primero (da URLs directas scontent CDN) y luego facebookexternalhit
     const uas = [
-      'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
       'Twitterbot/1.0',
+      'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     ];
 
-    for (const ua of uas) {
-      try {
-        const res = await fetch(url, {
-          headers: { 'User-Agent': ua, 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8' },
-        });
-        const html = await res.text();
-        const ogImgMatch =
-          html.match(/property="og:image"\s+content="([^"]+)"/i) ||
-          html.match(/content="([^"]+)"\s+property="og:image"/i) ||
-          html.match(/"image":\s*\{"@type":\s*"ImageObject",\s*"url":\s*"([^"]+)"/i);
-        const ogTitleMatch =
-          html.match(/property="og:title"\s+content="([^"]+)"/i) ||
-          html.match(/content="([^"]+)"\s+property="og:title"/i);
+    for (const targetUrl of [canonicalUrl, url]) {
+      for (const ua of uas) {
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'User-Agent': ua, 'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8' },
+          });
+          const html = await res.text();
+          const ogImgMatch =
+            html.match(/property="og:image"\s+content="([^"]+)"/i) ||
+            html.match(/content="([^"]+)"\s+property="og:image"/i) ||
+            html.match(/"image":\s*\{"@type":\s*"ImageObject",\s*"url":\s*"([^"]+)"/i);
+          const ogTitleMatch =
+            html.match(/property="og:title"\s+content="([^"]+)"/i) ||
+            html.match(/content="([^"]+)"\s+property="og:title"/i);
 
-        if (ogImgMatch && ogImgMatch[1]) {
-          const rawUrl = ogImgMatch[1].replace(/&amp;/g, '&');
-          if (!rawUrl.includes('static.xx.fbcdn.net/rsrc.php')) {
-            return this.buildMediaResponse({
-              id: `fb_${Date.now()}`,
-              title: ogTitleMatch ? ogTitleMatch[1].replace(/&amp;/g, '&') : 'Foto de Facebook',
-              uploader: 'Facebook User',
-              platform: 'Facebook',
-              imageUrls: [rawUrl],
-            });
+          if (ogImgMatch && ogImgMatch[1]) {
+            const rawUrl = ogImgMatch[1].replace(/&amp;/g, '&');
+            if (!rawUrl.includes('static.xx.fbcdn.net/rsrc.php')) {
+              return this.buildMediaResponse({
+                id: `fb_${Date.now()}`,
+                title: ogTitleMatch ? ogTitleMatch[1].replace(/&amp;/g, '&') : 'Foto de Facebook',
+                uploader: 'Facebook User',
+                platform: 'Facebook',
+                imageUrls: [rawUrl],
+              });
+            }
           }
-        }
-      } catch {}
+        } catch {}
+      }
     }
     return null;
   }

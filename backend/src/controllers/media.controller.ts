@@ -10,6 +10,41 @@ function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9_\-\. ]/g, '_').trim() || 'media_download';
 }
 
+async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const headers = getImageHeaders(imageUrl);
+    let fetchRes = await fetch(imageUrl, { headers });
+
+    let contentType = fetchRes.headers.get('content-type') || '';
+    if (contentType.includes('text/html') || fetchRes.status >= 400) {
+      const fallbackHeaders = {
+        ...headers,
+        'user-agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
+        'referer': 'https://www.facebook.com/',
+      };
+      const retryRes = await fetch(imageUrl, { headers: fallbackHeaders });
+      if (retryRes.ok && (retryRes.headers.get('content-type') || '').startsWith('image/')) {
+        fetchRes = retryRes;
+        contentType = retryRes.headers.get('content-type') || 'image/jpeg';
+      }
+    }
+
+    if (!fetchRes.ok) return null;
+
+    contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
+    if (contentType.includes('text/html')) return null;
+
+    const arrayBuffer = await fetchRes.arrayBuffer();
+    return {
+      buffer: Buffer.from(arrayBuffer),
+      contentType,
+    };
+  } catch (e) {
+    console.error(`[fetchImageBuffer] Error obteniendo imagen (${imageUrl}):`, e);
+    return null;
+  }
+}
+
 export const mediaController = {
   async getHealth(req: Request, res: Response): Promise<void> {
     const health = await ytdlpService.checkHealth();
@@ -29,18 +64,15 @@ export const mediaController = {
         return;
       }
 
-      const headers = getImageHeaders(imageUrl);
-      const fetchRes = await fetch(imageUrl, { headers });
-
-      if (!fetchRes.ok) {
-        res.status(fetchRes.status).send('Error al cargar la imagen desde el CDN.');
+      const imgData = await fetchImageBuffer(imageUrl);
+      if (!imgData) {
+        res.status(502).send('No se pudo cargar la imagen desde el CDN.');
         return;
       }
 
-      const arrayBuffer = await fetchRes.arrayBuffer();
-      res.setHeader('Content-Type', fetchRes.headers.get('content-type') || 'image/jpeg');
+      res.setHeader('Content-Type', imgData.contentType);
       res.setHeader('Cache-Control', 'public, max-age=86400');
-      res.send(Buffer.from(arrayBuffer));
+      res.send(imgData.buffer);
     } catch (err) {
       console.error('[Image Proxy] Error:', err);
       res.status(500).send('Error procesando imagen');
@@ -100,10 +132,10 @@ export const mediaController = {
         for (let i = 0; i < info.images.length; i++) {
           const imgItem = info.images[i];
           try {
-            const fetchRes = await fetch(imgItem.url, { headers: getImageHeaders(imgItem.url) });
-            if (fetchRes.ok) {
-              const buffer = Buffer.from(await fetchRes.arrayBuffer());
-              zip.append(buffer, { name: `foto_${i + 1}.jpg` });
+            const imgData = await fetchImageBuffer(imgItem.url);
+            if (imgData) {
+              const fileExt = imgData.contentType.includes('png') ? 'png' : 'jpg';
+              zip.append(imgData.buffer, { name: `foto_${i + 1}.${fileExt}` });
             }
           } catch (itemErr) {
             console.warn(`[Download ZIP] Error descargando foto ${i + 1}:`, itemErr);
@@ -145,17 +177,17 @@ export const mediaController = {
         }
 
         console.log(`[Download Image] Transmitiendo foto ${photoIndex}...`);
-        const fetchRes = await fetch(imageUrl, { headers: getImageHeaders(imageUrl) });
+        const imgData = await fetchImageBuffer(imageUrl);
 
-        if (!fetchRes.ok) {
-          res.status(fetchRes.status).json({ success: false, error: 'No se pudo descargar la imagen desde el CDN.' });
+        if (!imgData) {
+          res.status(502).json({ success: false, error: 'No se pudo descargar la imagen desde el CDN.' });
           return;
         }
 
-        const buffer = Buffer.from(await fetchRes.arrayBuffer());
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Content-Disposition', `attachment; filename="foto_${photoIndex}.jpg"`);
-        res.send(buffer);
+        const ext = imgData.contentType.includes('png') ? 'png' : (imgData.contentType.includes('webp') ? 'webp' : 'jpg');
+        res.setHeader('Content-Type', imgData.contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="foto_${photoIndex}.${ext}"`);
+        res.send(imgData.buffer);
         return;
       } catch (imgErr) {
         console.error(`[Download Image] Error descargando imagen:`, imgErr);
