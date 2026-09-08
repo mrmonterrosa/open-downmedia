@@ -216,37 +216,108 @@ export class ImageExtractorService {
   }
 
   /**
-   * Extracción de fotos de Reddit (galerías y publicaciones de una imagen)
+   * Extracción de fotos de Reddit (imágenes individuales, galerías y álbumes sin el banner genérico)
    */
   public async extractReddit(url: string): Promise<MediaInfo | null> {
     try {
-      const uas = [
-        'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)',
-        'Twitterbot/1.0',
-        'facebookexternalhit/1.1',
-      ];
+      const BOT_UA = 'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)';
 
-      for (const ua of uas) {
-        const res = await fetch(url, { headers: { 'User-Agent': ua } });
-        if (res.ok) {
-          const text = await res.text();
-          const ogImg = text.match(/property="og:image"\s+content="([^"]+)"/i) || text.match(/content="([^"]+)"\s+property="og:image"/i);
-          const ogTitle = text.match(/property="og:title"\s+content="([^"]+)"/i) || text.match(/content="([^"]+)"\s+property="og:title"/i);
-
-          if (ogImg && ogImg[1]) {
-            const cleanImg = ogImg[1].replace(/&amp;/g, '&');
-            return this.buildMediaResponse({
-              id: `reddit_${Date.now()}`,
-              title: ogTitle ? ogTitle[1].replace(/&amp;/g, '&') : 'Publicación de Reddit',
-              uploader: 'Reddit Community',
-              platform: 'Reddit',
-              imageUrls: [cleanImg],
+      // 1. Resolver enlaces cortos de compartir (/s/ o /share/) a la URL canónica del post
+      let canonical = url;
+      if (url.includes('/s/') || url.includes('/share/')) {
+        try {
+          const res = await fetch(url, {
+            headers: { 'User-Agent': BOT_UA },
+            redirect: 'manual',
+          });
+          if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
+            canonical = res.headers.get('location')!;
+          } else {
+            const followRes = await fetch(url, {
+              headers: { 'User-Agent': BOT_UA },
+              redirect: 'follow',
             });
+            canonical = followRes.url;
           }
+        } catch (e) {
+          console.warn('[Reddit Extractor] Error resolviendo URL canónica:', e);
         }
       }
+
+      // 2. Extraer el identificador del post
+      const match = canonical.match(/comments\/([a-zA-Z0-9]+)/i);
+      if (!match) {
+        console.warn(`[Reddit Extractor] No se pudo extraer el ID del post desde: ${canonical}`);
+        return null;
+      }
+
+      const postId = match[1];
+
+      // 3. Consultar el feed Atom/RSS oficial del post en Reddit
+      const rssUrl = `https://www.reddit.com/comments/${postId}.rss`;
+      const rssRes = await fetch(rssUrl, {
+        headers: { 'User-Agent': BOT_UA },
+      });
+
+      if (!rssRes.ok) {
+        console.warn(`[Reddit Extractor] RSS feed falló con estado: ${rssRes.status}`);
+        return null;
+      }
+
+      const xml = await rssRes.text();
+
+      // Extraer autor real
+      const authorMatch = xml.match(/<author><name>(.*?)<\/name>/i);
+      const author = authorMatch ? authorMatch[1].replace(/^\/u\//, 'u/') : 'Reddit User';
+
+      // Extraer título real de la publicación
+      const titleMatch = xml.match(/<title>(.*?)<\/title>/i);
+      let title = titleMatch ? titleMatch[1].replace(' : reddit.com', '').trim() : 'Publicación de Reddit';
+      title = title.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+
+      // Extraer el contenido del primer <entry>
+      const firstEntryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/i);
+      const entryContent = firstEntryMatch ? firstEntryMatch[1] : xml;
+
+      const foundImages: string[] = [];
+
+      // Buscar enlaces directos a i.redd.it
+      const directMatches = [...entryContent.matchAll(/https:\/\/i\.redd\.it\/([a-zA-Z0-9_\-\.]+)/gi)];
+      for (const m of directMatches) {
+        const fullUrl = `https://i.redd.it/${m[1]}`;
+        if (!foundImages.includes(fullUrl)) foundImages.push(fullUrl);
+      }
+
+      // Buscar miniaturas en preview.redd.it y convertirlas a su versión en resolución original en i.redd.it
+      const previewMatches = [...entryContent.matchAll(/https:\/\/preview\.redd\.it\/([a-zA-Z0-9_\-\.]+)\?(?:amp;)?/gi)];
+      for (const m of previewMatches) {
+        const filename = m[1];
+        const originalUrl = `https://i.redd.it/${filename}`;
+        if (!foundImages.includes(originalUrl)) foundImages.push(originalUrl);
+      }
+
+      // Buscar imágenes de Imgur
+      const imgurMatches = [...entryContent.matchAll(/https:\/\/i\.imgur\.com\/([a-zA-Z0-9_\-\.]+)/gi)];
+      for (const m of imgurMatches) {
+        const fullUrl = `https://i.imgur.com/${m[1]}`;
+        if (!foundImages.includes(fullUrl)) foundImages.push(fullUrl);
+      }
+
+      // Si encontramos imágenes reales (no banners genéricos), construir la respuesta
+      if (foundImages.length > 0) {
+        console.log(`[Reddit Extractor] Extraídas ${foundImages.length} fotos reales de Reddit para post ${postId} (Autor: ${author}).`);
+        return this.buildMediaResponse({
+          id: `reddit_${postId}_${Date.now()}`,
+          title,
+          uploader: `${author} (Reddit)`,
+          platform: 'Reddit',
+          imageUrls: foundImages,
+        });
+      }
+
+      console.log(`[Reddit Extractor] La publicación ${postId} no contiene imágenes ni galerías adjuntas.`);
     } catch (err) {
-      console.warn('[Reddit Extractor] Error:', err);
+      console.warn('[Reddit Extractor] Error procesando post de Reddit:', err);
     }
     return null;
   }

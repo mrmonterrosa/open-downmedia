@@ -247,6 +247,13 @@ class YtDlpService {
       }
     }
 
+    if (platform === 'Reddit') {
+      const rdResult = await imageExtractorService.extractReddit(url);
+      if (rdResult) {
+        return rdResult;
+      }
+    }
+
     if (!this.ytdlp) {
       throw new Error('El motor yt-dlp aún no está listo.');
     }
