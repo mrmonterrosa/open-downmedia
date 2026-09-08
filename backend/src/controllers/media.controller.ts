@@ -1,20 +1,37 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import archiver from 'archiver';
 import { ytdlpService } from '../services/ytdlp.service.js';
 import { getImageHeaders } from '../services/image.service.js';
 import { downloadControlService } from '../services/download-control.service.js';
 import { ENV } from '../config/environment.js';
 
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024; // 20 MB límite por imagen para evitar agotamiento de memoria
+
 function sanitizeFilename(name: string): string {
-  return name.replace(/[^a-zA-Z0-9_\-\. ]/g, '_').trim() || 'media_download';
+  // 1. Extraer nombre base para evitar cualquier directorio o path traversal (../ o ..\)
+  const base = path.basename(name).replace(/^[.\s]+/, '');
+  // 2. Reemplazar caracteres inseguros o de inyección de cabeceras HTTP
+  const cleaned = base.replace(/[^a-zA-Z0-9_\-\. ]/g, '_').trim();
+  // 3. Truncar a un máximo seguro de 100 caracteres
+  const truncated = cleaned.slice(0, 100);
+  return truncated || 'media_download';
 }
 
 async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; contentType: string } | null> {
   try {
     const headers = getImageHeaders(imageUrl);
-    let fetchRes = await fetch(imageUrl, { headers });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000); // 12s timeout
+
+    let fetchRes: any;
+    try {
+      fetchRes = await fetch(imageUrl, { headers, signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     let contentType = fetchRes.headers.get('content-type') || '';
     if (contentType.includes('text/html') || fetchRes.status >= 400) {
@@ -23,10 +40,16 @@ async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; con
         'user-agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)',
         'referer': 'https://www.facebook.com/',
       };
-      const retryRes = await fetch(imageUrl, { headers: fallbackHeaders });
-      if (retryRes.ok && (retryRes.headers.get('content-type') || '').startsWith('image/')) {
-        fetchRes = retryRes;
-        contentType = retryRes.headers.get('content-type') || 'image/jpeg';
+      const retryController = new AbortController();
+      const retryTimeout = setTimeout(() => retryController.abort(), 12000);
+      try {
+        const retryRes = await fetch(imageUrl, { headers: fallbackHeaders, signal: retryController.signal });
+        if (retryRes.ok && (retryRes.headers.get('content-type') || '').startsWith('image/')) {
+          fetchRes = retryRes;
+          contentType = retryRes.headers.get('content-type') || 'image/jpeg';
+        }
+      } finally {
+        clearTimeout(retryTimeout);
       }
     }
 
@@ -35,7 +58,19 @@ async function fetchImageBuffer(imageUrl: string): Promise<{ buffer: Buffer; con
     contentType = fetchRes.headers.get('content-type') || 'image/jpeg';
     if (contentType.includes('text/html')) return null;
 
+    // Verificar Content-Length si viene presente para abortar payloads gigantes
+    const contentLength = fetchRes.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_BYTES) {
+      console.warn(`[fetchImageBuffer] Imagen excede tamaño máximo permitido (${contentLength} bytes)`);
+      return null;
+    }
+
     const arrayBuffer = await fetchRes.arrayBuffer();
+    if (arrayBuffer.byteLength > MAX_IMAGE_BYTES) {
+      console.warn(`[fetchImageBuffer] Buffer excede tamaño máximo permitido (${arrayBuffer.byteLength} bytes)`);
+      return null;
+    }
+
     return {
       buffer: Buffer.from(arrayBuffer),
       contentType,
@@ -66,12 +101,13 @@ export const mediaController = {
       }
 
       const imgData = await fetchImageBuffer(imageUrl);
-      if (!imgData) {
-        res.status(502).send('No se pudo cargar la imagen desde el CDN.');
+      if (!imgData || !imgData.contentType.startsWith('image/')) {
+        res.status(502).send('No se pudo cargar la imagen desde el CDN o el tipo de contenido no es válido.');
         return;
       }
 
       res.setHeader('Content-Type', imgData.contentType);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('Cache-Control', 'public, max-age=86400');
       res.send(imgData.buffer);
     } catch (err) {
@@ -177,8 +213,11 @@ export const mediaController = {
           : (archiver as any)('zip');
         zip.pipe(res);
 
-        for (let i = 0; i < info.images.length; i++) {
-          const imgItem = info.images[i];
+        const MAX_ZIP_IMAGES = 50;
+        const imagesToZip = info.images.slice(0, MAX_ZIP_IMAGES);
+
+        for (let i = 0; i < imagesToZip.length; i++) {
+          const imgItem = imagesToZip[i];
           try {
             const imgData = await fetchImageBuffer(imgItem.url);
             if (imgData) {
@@ -191,7 +230,7 @@ export const mediaController = {
         }
 
         await zip.finalize();
-        console.log(`[Download ZIP] Álbum de ${info.images.length} fotos transmitido con éxito.`);
+        console.log(`[Download ZIP] Álbum de ${imagesToZip.length} fotos transmitido con éxito.`);
         return;
       } catch (zipErr) {
         console.error(`[Download ZIP] Error creando archivo ZIP:`, zipErr);
@@ -368,7 +407,18 @@ export const mediaController = {
     const token = (req.headers['x-admin-token'] as string) || (req.query.token as string);
     const expectedToken = process.env.ADMIN_SECRET_KEY || 'opendownmedia_admin_2026';
 
-    if (process.env.NODE_ENV === 'production' && token !== expectedToken) {
+    const isTokenValid = (userToken?: string, secret?: string): boolean => {
+      if (!userToken || !secret) return false;
+      const bufUser = Buffer.from(userToken);
+      const bufSecret = Buffer.from(secret);
+      if (bufUser.length !== bufSecret.length) {
+        crypto.timingSafeEqual(bufSecret, bufSecret);
+        return false;
+      }
+      return crypto.timingSafeEqual(bufUser, bufSecret);
+    };
+
+    if (!isTokenValid(token, expectedToken)) {
       res.status(401).json({ success: false, error: 'Acceso no autorizado a las métricas del sistema.' });
       return;
     }

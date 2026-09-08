@@ -23,6 +23,7 @@ const ALLOWED_DOMAIN_PATTERNS = [
   /^(.*\.)?fbsbx\.com$/i,
   /^(.*\.)?reddit\.com$/i,
   /^(.*\.)?redd\.it$/i,
+  /^(.*\.)?imgur\.com$/i,
   /^(.*\.)?pinterest\.com$/i,
   /^pin\.it$/i,
   /^(.*\.)?pinimg\.com$/i,
@@ -31,7 +32,7 @@ const ALLOWED_DOMAIN_PATTERNS = [
   /^(.*\.)?bilibili\.com$/i,
 ];
 
-// Direcciones IP privadas y reservadas para bloquear (anti-SSRF)
+// Direcciones IP privadas, locales y reservadas para bloquear (anti-SSRF estricto)
 const PRIVATE_IP_PATTERNS = [
   /^127\./,
   /^10\./,
@@ -41,6 +42,13 @@ const PRIVATE_IP_PATTERNS = [
   /^0\.0\.0\.0/,
   /^localhost$/i,
   /^::1$/,
+  /^::ffff:127\./,
+  /^::ffff:10\./,
+  /^::ffff:172\./,
+  /^::ffff:192\.168\./,
+  /^::ffff:169\.254\./,
+  /^fc00:/i,
+  /^fe80:/i,
 ];
 
 export const urlSchema = z.object({
@@ -56,9 +64,14 @@ export function validateSocialUrl(urlString: string): { isValid: boolean; error?
       return { isValid: false, error: 'Protocolo no permitido. Solo se acepta HTTP o HTTPS.' };
     }
 
+    // Bloqueo de puertos no estándar para evitar escaneo o bypass de servicios internos
+    if (parsed.port && parsed.port !== '80' && parsed.port !== '443') {
+      return { isValid: false, error: 'Puerto no permitido por seguridad. Solo se aceptan conexiones estándar HTTP/HTTPS.' };
+    }
+
     const hostname = parsed.hostname;
 
-    // Verificar si apunta a una IP privada o localhost
+    // Verificar si apunta a una IP privada, reservada o localhost
     for (const ipPattern of PRIVATE_IP_PATTERNS) {
       if (ipPattern.test(hostname)) {
         return { isValid: false, error: 'Acceso a redes internas o localhost bloqueado por seguridad.' };
@@ -70,7 +83,7 @@ export function validateSocialUrl(urlString: string): { isValid: boolean; error?
     if (!isAllowed) {
       return {
         isValid: false,
-        error: `El dominio '${hostname}' no está en la lista de redes sociales soportadas (TikTok, Instagram, YouTube, X, Reddit, Facebook, Pinterest, etc.).`,
+        error: `El dominio '${hostname}' no está en la lista de redes sociales soportadas (TikTok, Instagram, YouTube, X, Reddit, Facebook, Pinterest, Imgur, etc.).`,
       };
     }
 
@@ -111,6 +124,25 @@ export function urlSecurityMiddleware(req: Request, res: Response, next: NextFun
   next();
 }
 
+/**
+ * Middleware de seguridad anti-SSRF para el proxy de imágenes
+ */
+export function imageProxySecurityMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const imageUrl = req.query.url as string;
+  if (!imageUrl || typeof imageUrl !== 'string') {
+    res.status(400).json({ success: false, error: 'El parámetro url es requerido para el proxy de imagen.' });
+    return;
+  }
+
+  const validation = validateSocialUrl(imageUrl);
+  if (!validation.isValid) {
+    res.status(400).json({ success: false, error: validation.error });
+    return;
+  }
+
+  next();
+}
+
 // Limitador de tasa para extracción de metadatos (100 peticiones cada 15 minutos)
 export const infoRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -129,5 +161,29 @@ export const downloadRateLimiter = rateLimit({
   message: {
     success: false,
     error: 'Has alcanzado el límite de descargas. Por favor, espera un momento para continuar.',
+  },
+});
+
+// Limitador de tasa para el proxy de imágenes (150 peticiones cada 15 minutos por IP)
+export const imageProxyRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 150,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Demasiadas solicitudes de vista previa de imagen. Por favor, espera un momento.',
+  },
+});
+
+// Limitador de tasa para consultas administrativas / métricas (30 peticiones cada 15 minutos)
+export const adminRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Demasiadas consultas administrativas.',
   },
 });

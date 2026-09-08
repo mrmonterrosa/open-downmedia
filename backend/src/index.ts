@@ -7,11 +7,17 @@ import { ENV } from './config/environment.js';
 import { mediaController } from './controllers/media.controller.js';
 import {
   urlSecurityMiddleware,
+  imageProxySecurityMiddleware,
   infoRateLimiter,
   downloadRateLimiter,
+  imageProxyRateLimiter,
+  adminRateLimiter,
 } from './middleware/security.js';
 
 const app = express();
+
+// Habilitar trust proxy para reverse proxies (Nginx / Docker / Dokploy)
+app.set('trust proxy', 1);
 
 // Seguridad con Helmet (protección de cabeceras HTTP)
 app.use(
@@ -25,12 +31,14 @@ app.use(
   cors({
     origin: ENV.CORS_ORIGIN === '*' ? true : [ENV.CORS_ORIGIN, 'http://localhost:4200', 'http://localhost:8080'],
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token'],
     exposedHeaders: ['Content-Disposition'],
   })
 );
 
-app.use(express.json());
+// Limitar tamaño del cuerpo para mitigar ataques de denegación de servicio (DoS)
+app.use(express.json({ limit: '100kb' }));
+app.use(express.urlencoded({ extended: false, limit: '100kb' }));
 
 // Endpoints
 app.get('/api/health', mediaController.getHealth);
@@ -51,11 +59,20 @@ app.get(
   mediaController.downloadMedia
 );
 
-// Proxy de imágenes para visualización segura de miniaturas en el navegador
-app.get('/api/media/image-proxy', mediaController.imageProxy);
+// Proxy de imágenes para visualización segura de miniaturas en el navegador (protegido contra SSRF y saturación)
+app.get(
+  '/api/media/image-proxy',
+  imageProxyRateLimiter,
+  imageProxySecurityMiddleware,
+  mediaController.imageProxy
+);
 
-// Monitoreo y métricas del servidor en tiempo real
-app.get('/api/admin/metrics', mediaController.getMetrics);
+// Monitoreo y métricas del servidor en tiempo real (protegido con rate limiting y token)
+app.get(
+  '/api/admin/metrics',
+  adminRateLimiter,
+  mediaController.getMetrics
+);
 
 // Manejador global de errores
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

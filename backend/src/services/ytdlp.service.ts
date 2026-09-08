@@ -261,10 +261,15 @@ class YtDlpService {
     }
 
     try {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        throw new Error('Protocolo de URL no válido');
+      }
+
       const jsonOutput = await this.ytdlp.execPromise([
         '--dump-json',
         '--no-warnings',
         '--no-playlist',
+        '--',
         url,
       ]);
 
@@ -340,7 +345,6 @@ class YtDlpService {
 
   public getDownloadArgs(url: string, format: string, outputTemplate: string): string[] {
     const args = [
-      url,
       '-o', outputTemplate,
       '--no-playlist',
       '--no-warnings',
@@ -359,6 +363,9 @@ class YtDlpService {
     } else {
       args.push('-f', 'bv*+ba/b', '--merge-output-format', 'mp4');
     }
+
+    // Delimitador estándar '--' para prevenir inyección de opciones/flags CLI
+    args.push('--', url);
 
     return args;
   }

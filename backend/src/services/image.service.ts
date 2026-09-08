@@ -38,8 +38,12 @@ export class ImageExtractorService {
    * Ejecuta gallery-dl con la opción -j para volcar metadatos JSON de imágenes
    */
   public async extractWithGalleryDl(url: string): Promise<{ images: string[]; title?: string; uploader?: string } | null> {
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return null;
+    }
+
     return new Promise((resolve) => {
-      execFile('gallery-dl', ['-j', url], { maxBuffer: 15 * 1024 * 1024, timeout: 25000 }, (err, stdout) => {
+      execFile('gallery-dl', ['-j', '--', url], { maxBuffer: 15 * 1024 * 1024, timeout: 25000 }, (err, stdout) => {
         if (err || !stdout) {
           return resolve(null);
         }
