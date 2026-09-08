@@ -26,6 +26,31 @@ export class App {
   isMetricsModalOpen = signal<boolean>(false);
   serverMetrics = signal<any>(null);
   isLoadingMetrics = signal<boolean>(false);
+  canInstallPwa = signal<boolean>(false);
+  private deferredPrompt: any = null;
+
+  @HostListener('window:beforeinstallprompt', ['$event'])
+  onBeforeInstallPrompt(e: any): void {
+    e.preventDefault();
+    this.deferredPrompt = e;
+    this.canInstallPwa.set(true);
+  }
+
+  @HostListener('window:appinstalled')
+  onAppInstalled(): void {
+    this.canInstallPwa.set(false);
+    this.deferredPrompt = null;
+  }
+
+  async installPwa(): Promise<void> {
+    if (this.deferredPrompt) {
+      this.deferredPrompt.prompt();
+      const { outcome } = await this.deferredPrompt.userChoice;
+      console.log(`[PWA] Resultado de instalación: ${outcome}`);
+      this.deferredPrompt = null;
+      this.canInstallPwa.set(false);
+    }
+  }
 
   supportedPlatforms = [
     { name: 'TikTok', icon: 'tiktok' },

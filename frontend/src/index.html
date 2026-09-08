@@ -13,14 +13,22 @@
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://open-downmedia.com/">
   
-  <!-- Color de Tema e Iconos -->
+  <!-- Progressive Web App (PWA) & Capacidades Móviles -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Open-DownMedia">
+  <meta name="application-name" content="Open-DownMedia">
+
+  <!-- Color de Tema e Iconos de Máxima Legibilidad -->
   <meta name="theme-color" content="#121316">
   <meta name="msapplication-navbutton-color" content="#121316">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="icon" type="image/png" sizes="192x192" href="app-icon.png">
-  <link rel="alternate icon" type="image/x-icon" href="favicon.ico">
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="alternate icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
   <!-- Open Graph / Facebook / WhatsApp -->
   <meta property="og:type" content="website">
@@ -150,5 +158,19 @@
 </head>
 <body class="bg-[#121316] text-[#f3f4f6] min-h-screen selection:bg-[#facc15] selection:text-[#121316]">
   <app-root></app-root>
+  <!-- Registro de Service Worker para PWA (Instalable en PC y Móvil) -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js')
+          .then(function(reg) {
+            console.log('[PWA] Service Worker registrado exitosamente:', reg.scope);
+          })
+          .catch(function(err) {
+            console.warn('[PWA] Error registrando Service Worker:', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
