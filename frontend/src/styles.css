@@ -40,3 +40,25 @@ body {
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   overflow-x: hidden;
 }
+
+/* Reglas estrictas para evitar FOUC y distorsión de iconos SVG */
+svg {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+svg.w-4 {
+  width: 1rem !important;
+  height: 1rem !important;
+}
+
+svg.w-5 {
+  width: 1.25rem !important;
+  height: 1.25rem !important;
+}
+
+svg.w-6 {
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+}
