@@ -464,7 +464,7 @@ export class ImageExtractorService {
         id: `img_${idx}`,
         url: imgUrl,
         thumbnail: proxyThumb,
-        filename: `${opts.platform.toLowerCase().replace(/[^a-z0-9]/g, '_')}_foto_${idx + 1}.jpg`,
+        filename: `open_downmedia_${opts.platform.toLowerCase().replace(/[^a-z0-9]/g, '_')}_foto_${idx + 1}.jpg`,
       };
     });
 

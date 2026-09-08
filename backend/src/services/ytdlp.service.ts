@@ -181,7 +181,9 @@ class YtDlpService {
               id: `img_${idx}`,
               url: it.realUrl,
               thumbnail: proxyThumb,
-              filename: it.filename || `instagram_photo_${idx + 1}.jpg`,
+              filename: it.filename && it.filename.startsWith('open_downmedia_')
+                ? it.filename
+                : `open_downmedia_${it.filename || `instagram_photo_${idx + 1}.jpg`}`,
             };
           });
 

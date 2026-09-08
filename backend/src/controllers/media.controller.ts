@@ -233,9 +233,13 @@ export const mediaController = {
         }
 
         const ext = imgData.contentType.includes('png') ? 'png' : (imgData.contentType.includes('webp') ? 'webp' : 'jpg');
-        const filename = requestedFilename
+        let filename = requestedFilename
           ? sanitizeFilename(requestedFilename)
           : `foto_${photoIndex}.${ext}`;
+
+        if (!filename.startsWith('open_downmedia_')) {
+          filename = `open_downmedia_${filename}`;
+        }
 
         res.setHeader('Content-Type', imgData.contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -320,7 +324,13 @@ export const mediaController = {
           }
 
           const filePath = path.join(ENV.DOWNLOADS_DIR, matchedFile);
-          const downloadFilename = sanitizeFilename(`open_downmedia_${downloadId.split('_')[1]}.${ext}`);
+          let downloadFilename = requestedFilename
+            ? sanitizeFilename(requestedFilename)
+            : `open_downmedia_${downloadId.split('_')[1]}.${ext}`;
+
+          if (!downloadFilename.startsWith('open_downmedia_')) {
+            downloadFilename = `open_downmedia_${downloadFilename}`;
+          }
 
           res.download(filePath, downloadFilename, (downloadErr) => {
             safeRelease(!downloadErr);

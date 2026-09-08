@@ -205,6 +205,10 @@ export class App {
   }
 
   private async triggerDownload(downloadUrl: string, filename?: string, isImage: boolean = false): Promise<void> {
+    const ensurePrefix = (name: string) => {
+      return name.startsWith('open_downmedia_') ? name : `open_downmedia_${name}`;
+    };
+
     if (isImage) {
       try {
         const response = await fetch(downloadUrl);
@@ -217,11 +221,12 @@ export class App {
         const link = document.createElement('a');
         link.href = blobUrl;
         if (filename) {
-          link.download = filename;
+          link.download = ensurePrefix(filename);
         } else {
           const disposition = response.headers.get('content-disposition');
           const match = disposition && disposition.match(/filename="?([^"]+)"?/);
-          link.download = match ? match[1] : 'imagen.jpg';
+          const rawName = match ? match[1] : 'imagen.jpg';
+          link.download = ensurePrefix(rawName);
         }
         document.body.appendChild(link);
         link.click();
@@ -237,9 +242,9 @@ export class App {
     const link = document.createElement('a');
     link.href = downloadUrl;
     if (filename) {
-      link.setAttribute('download', filename);
+      link.setAttribute('download', ensurePrefix(filename));
     } else {
-      link.setAttribute('download', '');
+      link.setAttribute('download', 'open_downmedia_descarga');
     }
     document.body.appendChild(link);
     link.click();
@@ -258,9 +263,10 @@ export class App {
 
     const currentFmt = media.formats.find((f) => f.id === format);
     const isImage = !!(currentFmt?.isImage || currentFmt?.directUrl || format.startsWith('image_'));
+    const platformPrefix = `open_downmedia_${media.platform.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
     const filename = currentFmt?.isImage && currentFmt?.id !== 'image_all'
-      ? `${media.platform.toLowerCase()}_${format}.${currentFmt.ext || 'jpg'}`
-      : (format === 'image_all' ? 'open_downmedia_album.zip' : undefined);
+      ? `${platformPrefix}_${format}.${currentFmt.ext || 'jpg'}`
+      : (format === 'image_all' ? 'open_downmedia_album.zip' : `${platformPrefix}_${format}.mp4`);
 
     const downloadUrl = this.downloaderService.getDownloadUrl(url, format, currentFmt?.directUrl, filename);
 
@@ -280,7 +286,10 @@ export class App {
 
   downloadSingleImage(imageItem: MediaImageItem, index: number): void {
     const url = this.urlInput().trim();
-    const filename = imageItem.filename || `foto_${index + 1}.jpg`;
+    let filename = imageItem.filename || `foto_${index + 1}.jpg`;
+    if (!filename.startsWith('open_downmedia_')) {
+      filename = `open_downmedia_${filename}`;
+    }
     const downloadUrl = this.downloaderService.getDownloadUrl(url, `image_${index}`, imageItem.url, filename);
 
     this.triggerDownload(downloadUrl, filename, true);
