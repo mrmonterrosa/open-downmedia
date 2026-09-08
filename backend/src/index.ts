@@ -26,10 +26,29 @@ app.use(
   })
 );
 
-// CORS configurado para permitir peticiones del frontend
+// Función auxiliar para parsear orígenes CORS con o sin protocolo (ej: https:// o dominio directo)
+function parseAllowedOrigins(corsEnv: string): (string | RegExp)[] | boolean {
+  if (!corsEnv || corsEnv.trim() === '*') return true;
+
+  const rawList = corsEnv.split(',').map((o) => o.trim()).filter(Boolean);
+  const origins: string[] = ['http://localhost:4200', 'http://localhost:8080'];
+
+  for (const item of rawList) {
+    if (item.startsWith('http://') || item.startsWith('https://')) {
+      origins.push(item);
+    } else {
+      // Si se especificó el dominio sin protocolo (ej: open-downmedia.cgmo.net)
+      origins.push(`https://${item}`);
+      origins.push(`http://${item}`);
+    }
+  }
+  return origins;
+}
+
+// CORS configurado para permitir peticiones del frontend y dominio de producción
 app.use(
   cors({
-    origin: ENV.CORS_ORIGIN === '*' ? true : [ENV.CORS_ORIGIN, 'http://localhost:4200', 'http://localhost:8080'],
+    origin: parseAllowedOrigins(ENV.CORS_ORIGIN),
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-token'],
     exposedHeaders: ['Content-Disposition'],
