@@ -266,15 +266,21 @@
             <div class="pt-2 flex flex-col sm:flex-row items-center gap-3">
               <button 
                 (click)="downloadCurrentMedia()"
-                [disabled]="isDownloading()"
-                class="w-full sm:w-auto px-8 py-3.5 rounded-xl text-sm font-bold bg-[#facc15] text-neutral-950 hover:bg-[#eab308] hover:scale-105 transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
+                [disabled]="isDownloading() || downloadCooldown() > 0"
+                class="w-full sm:w-auto px-8 py-3.5 rounded-xl text-sm font-bold bg-[#facc15] text-neutral-950 hover:bg-[#eab308] hover:scale-105 transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                @if (isDownloading()) {
+                @if (isDownloading() || downloadCooldown() > 0) {
                   <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span>Descargando...</span>
+                  <span>
+                    @if (downloadCooldown() > 0) {
+                      Espera {{ downloadCooldown() }}s...
+                    } @else {
+                      Iniciando...
+                    }
+                  </span>
                 } @else {
                   <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -309,6 +315,15 @@
       </div>
 
       <div class="flex items-center gap-4">
+        <button 
+          (click)="openMetricsModal()" 
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-neutral-400 hover:text-[#facc15] transition-colors border border-white/5 cursor-pointer"
+          title="Ver métricas y estado en tiempo real del servidor"
+        >
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-[11px] font-medium">Estado del Servidor</span>
+        </button>
+
         <a href="https://github.com/mrmonterrosa/open-downmedia" target="_blank" rel="noopener noreferrer" class="text-neutral-400 hover:text-[#facc15] transition-colors">
           Código en GitHub
         </a>
@@ -416,6 +431,103 @@
           </div>
         }
 
+      </div>
+    </div>
+  }
+
+  <!-- Modal Bento de Monitoreo y Métricas en Tiempo Real -->
+  @if (isMetricsModalOpen()) {
+    <div 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn"
+      (click)="closeMetricsModal()"
+    >
+      <div 
+        class="relative max-w-lg w-full rounded-[24px] bg-[#18191e] border border-white/10 shadow-2xl p-6 space-y-5 text-white"
+        (click)="$event.stopPropagation()"
+      >
+        <!-- Header del Modal -->
+        <div class="flex items-center justify-between border-b border-white/10 pb-4">
+          <div class="flex items-center gap-2.5">
+            <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+            <h3 class="text-base font-bold tracking-wide">Métricas y Estado del Servidor</h3>
+          </div>
+          <button 
+            (click)="closeMetricsModal()" 
+            class="p-1.5 rounded-lg hover:bg-white/10 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+          >
+            <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        @if (isLoadingMetrics()) {
+          <div class="py-12 flex flex-col items-center justify-center gap-3 text-neutral-400">
+            <svg class="w-6 h-6 animate-spin text-[#facc15]" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+            </svg>
+            <span class="text-xs">Consultando telemetría en tiempo real...</span>
+          </div>
+        } @else if (serverMetrics(); as m) {
+          <!-- Bento Grid de Métricas -->
+          <div class="grid grid-cols-2 gap-3 text-xs">
+            <!-- Slots de Concurrencia -->
+            <div class="p-3.5 rounded-xl bg-[#121316] border border-white/5 space-y-1">
+              <span class="text-neutral-400 font-medium text-[11px] block">Slots de Descarga</span>
+              <div class="text-lg font-bold font-mono text-[#facc15]">
+                {{ m.concurrency.activeSlots }} / {{ m.concurrency.maxGlobalSlots }} en uso
+              </div>
+              <span class="text-[10px] text-neutral-500">
+                {{ m.concurrency.availableSlots }} slots libres
+              </span>
+            </div>
+
+            <!-- Uso de Memoria RAM -->
+            <div class="p-3.5 rounded-xl bg-[#121316] border border-white/5 space-y-1">
+              <span class="text-neutral-400 font-medium text-[11px] block">Memoria RAM (RSS)</span>
+              <div class="text-lg font-bold font-mono text-emerald-400">
+                {{ m.system.memoryRssMB }} MB
+              </div>
+              <span class="text-[10px] text-neutral-500">
+                Heap: {{ m.system.memoryHeapUsedMB }} MB
+              </span>
+            </div>
+
+            <!-- Aciertos de Caché -->
+            <div class="p-3.5 rounded-xl bg-[#121316] border border-white/5 space-y-1">
+              <span class="text-neutral-400 font-medium text-[11px] block">Aciertos Caché (Hit Ratio)</span>
+              <div class="text-lg font-bold font-mono text-cyan-400">
+                {{ m.stats.cacheHitRatio }}
+              </div>
+              <span class="text-[10px] text-neutral-500">
+                {{ m.stats.cacheHits }} aciertos (0 ms CPU)
+              </span>
+            </div>
+
+            <!-- Tiempo de Actividad (Uptime) -->
+            <div class="p-3.5 rounded-xl bg-[#121316] border border-white/5 space-y-1">
+              <span class="text-neutral-400 font-medium text-[11px] block">Tiempo Activo</span>
+              <div class="text-base font-bold font-mono text-purple-400 truncate">
+                {{ m.uptimeFormatted }}
+              </div>
+              <span class="text-[10px] text-neutral-500">
+                Total: {{ m.stats.totalDownloadsStarted }} descargas
+              </span>
+            </div>
+          </div>
+
+          <!-- Políticas de Seguridad Activas -->
+          <div class="p-3.5 rounded-xl bg-white/[0.02] border border-white/5 text-[11px] text-neutral-400 space-y-2">
+            <span class="font-bold text-neutral-300 block">Políticas de Control Activas:</span>
+            <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+              <div>• Concurrencia global: máx. {{ m.concurrency.maxGlobalSlots }}</div>
+              <div>• Por IP: máx. {{ m.policy.maxConcurrentPerIp }} descarga simultánea</div>
+              <div>• Duración video: máx. {{ m.policy.maxVideoDurationMinutes }} min</div>
+              <div>• Caché TTL: {{ m.policy.cacheTtlMinutes }} min</div>
+            </div>
+          </div>
+        }
       </div>
     </div>
   }

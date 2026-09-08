@@ -22,6 +22,10 @@ export class App {
   selectedFormat = signal<string>('video_hd');
   currentImageIndex = signal<number>(0);
   isLightboxOpen = signal<boolean>(false);
+  downloadCooldown = signal<number>(0);
+  isMetricsModalOpen = signal<boolean>(false);
+  serverMetrics = signal<any>(null);
+  isLoadingMetrics = signal<boolean>(false);
 
   supportedPlatforms = [
     { name: 'TikTok', icon: 'tiktok' },
@@ -160,10 +164,19 @@ export class App {
 
   @HostListener('window:keydown', ['$event'])
   handleKeyDown(event: KeyboardEvent): void {
-    if (this.isLightboxOpen()) {
-      if (event.key === 'Escape') {
+    if (event.key === 'Escape') {
+      if (this.isMetricsModalOpen()) {
+        this.closeMetricsModal();
+        return;
+      }
+      if (this.isLightboxOpen()) {
         this.closeLightbox();
-      } else if (event.key === 'ArrowLeft') {
+        return;
+      }
+    }
+
+    if (this.isLightboxOpen()) {
+      if (event.key === 'ArrowLeft') {
         this.prevImage();
       } else if (event.key === 'ArrowRight') {
         this.nextImage();
@@ -171,14 +184,35 @@ export class App {
     }
   }
 
+  openMetricsModal(): void {
+    this.isMetricsModalOpen.set(true);
+    this.isLoadingMetrics.set(true);
+    this.downloaderService.getMetrics().subscribe({
+      next: (res) => {
+        this.isLoadingMetrics.set(false);
+        if (res.success && res.data) {
+          this.serverMetrics.set(res.data);
+        }
+      },
+      error: () => {
+        this.isLoadingMetrics.set(false);
+      },
+    });
+  }
+
+  closeMetricsModal(): void {
+    this.isMetricsModalOpen.set(false);
+  }
+
   downloadCurrentMedia(): void {
     const media = this.mediaResult();
     const url = this.urlInput().trim();
     const format = this.selectedFormat();
 
-    if (!media || !url) return;
+    if (!media || !url || this.downloadCooldown() > 0) return;
 
     this.isDownloading.set(true);
+    this.downloadCooldown.set(4);
 
     const currentFmt = media.formats.find((f) => f.id === format);
     const downloadUrl = this.downloaderService.getDownloadUrl(url, format, currentFmt?.directUrl);
@@ -190,9 +224,16 @@ export class App {
     link.click();
     document.body.removeChild(link);
 
-    setTimeout(() => {
-      this.isDownloading.set(false);
-    }, 2500);
+    const interval = setInterval(() => {
+      const current = this.downloadCooldown();
+      if (current <= 1) {
+        clearInterval(interval);
+        this.downloadCooldown.set(0);
+        this.isDownloading.set(false);
+      } else {
+        this.downloadCooldown.set(current - 1);
+      }
+    }, 1000);
   }
 
   downloadSingleImage(imageItem: MediaImageItem, index: number): void {

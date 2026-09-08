@@ -53,6 +53,9 @@ app.get(
 // Proxy de imágenes para visualización segura de miniaturas en el navegador
 app.get('/api/media/image-proxy', mediaController.imageProxy);
 
+// Monitoreo y métricas del servidor en tiempo real
+app.get('/api/admin/metrics', mediaController.getMetrics);
+
 // Manejador global de errores
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('[Error no controlado]', err);

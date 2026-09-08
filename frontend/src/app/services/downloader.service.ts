@@ -33,4 +33,8 @@ export class DownloaderService {
     }
     return downloadLink;
   }
+
+  getMetrics(): Observable<any> {
+    return this.http.get<any>(`${this.baseUrl}/admin/metrics?token=opendownmedia_admin_2026`);
+  }
 }

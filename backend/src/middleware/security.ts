@@ -96,11 +96,14 @@ export const infoRateLimiter = rateLimit({
   message: { success: false, error: 'Demasiadas solicitudes. Por favor, intenta de nuevo en unos minutos.' },
 });
 
-// Limitador de tasa para descargas/streams (30 descargas cada 15 minutos)
+// Limitador de tasa para descargas/streams (15 descargas cada 15 minutos por IP)
 export const downloadRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 50,
+  max: 15,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: 'Límite de descargas alcanzado. Por favor, espera un momento.' },
+  message: {
+    success: false,
+    error: 'Has alcanzado el límite de 15 descargas cada 15 minutos. Por favor, espera un momento para continuar.',
+  },
 });
