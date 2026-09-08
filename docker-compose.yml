@@ -6,11 +6,18 @@ services:
     container_name: open-downmedia-backend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${BACKEND_PORT:-3001}:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - CORS_ORIGIN=*
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      - ADMIN_SECRET_KEY=${ADMIN_SECRET_KEY:-opendownmedia_admin_2026}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     volumes:
       - backend_downloads:/app/temp_downloads
     networks:
@@ -23,9 +30,10 @@ services:
     container_name: open-downmedia-frontend
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${FRONTEND_PORT:-8080}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - open-downmedia-net
 

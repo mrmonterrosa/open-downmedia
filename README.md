@@ -237,11 +237,13 @@ Dokploy es una plataforma de despliegue auto-hospedada basada en Docker. Existen
 4. En la sección de **Dominios**:
    - Crear un dominio apuntando al servicio `frontend` con el puerto `80` del contenedor (que expone el Nginx configurado).
    - Activar la casilla de certificado SSL automático con Let's Encrypt.
-5. Variables de entorno (opcionales en el servicio backend):
-   - `PORT=3001`
+5. Variables de entorno (disponibles como referencia en `.env.example`):
+   - `FRONTEND_PORT=80` (o el puerto que se desee asignar en el host si no se usa Traefik directo).
+   - `BACKEND_PORT=3001`
+   - `ADMIN_SECRET_KEY=tu_clave_secreta_personalizada` (requerida para autorizar consultas en `/api/admin/metrics`).
+   - `CORS_ORIGIN=*` (o el dominio asignado en Dokploy, ej. `https://open-downmedia.com`).
    - `NODE_ENV=production`
-   - `CORS_ORIGIN=*`
-6. Presionar **Deploy**. Dokploy clonará el proyecto, construirá las imágenes multi-stage del frontend y del backend, iniciará la red interna y publicará la aplicación en el dominio configurado.
+6. Presionar **Deploy**. Dokploy clonará el repositorio, construirá las imágenes del frontend y del backend, esperará a que el healthcheck interno valide que yt-dlp y FFmpeg están listos (`service_healthy`) y publicará la aplicación con HTTPS automático.
 
 ---
 
