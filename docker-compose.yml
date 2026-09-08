@@ -36,10 +36,13 @@ services:
         condition: service_healthy
     networks:
       - open-downmedia-net
+      - dokploy-network
 
 networks:
   open-downmedia-net:
     driver: bridge
+  dokploy-network:
+    external: true
 
 volumes:
   backend_downloads:
