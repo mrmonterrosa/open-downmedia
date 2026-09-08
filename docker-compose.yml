@@ -3,7 +3,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: open-downmedia-backend
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-3001}:3001"
@@ -27,13 +26,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: open-downmedia-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     networks:
       - open-downmedia-net
       - dokploy-network
